@@ -16,7 +16,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
     {
         var registrarProvider = context.SyntaxProvider
             .CreateSyntaxProvider(static (node, _) => node is ClassDeclarationSyntax,
-                static (ctx, ct) => TryGetRegistrar(ctx)).Where(static r => r is not null)!
+                static (ctx, _) => TryGetRegistrar(ctx)).Where(static r => r is not null)
             .Select(static (r, _) => r!);
 
         var combined = context.CompilationProvider.Combine(registrarProvider.Collect());
@@ -37,6 +37,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                 {
                     spc.ReportDiagnostic(d);
                 }
+
                 if (models.HasFatal) return;
             }
 
@@ -49,24 +50,16 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
     {
         if (ctx.Node is not ClassDeclarationSyntax classDecl) return null;
         var model = ctx.SemanticModel;
-        var symbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+        var symbol = model.GetDeclaredSymbol(classDecl);
         if (symbol is null) return null;
 
         var registrarInterface = symbol.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.ToDisplayString() ==
-            "FluentPermissions.Core.Abstractions.IPermissionRegistrar<TGroupOptions, TPermissionOptions>");
-        if (registrarInterface is null) return null;
-
-        return new RegistrarInfo(symbol, registrarInterface);
+                                                                          "FluentPermissions.Core.Abstractions.IPermissionRegistrar<TGroupOptions, TPermissionOptions>");
+        return registrarInterface is null ? null : new RegistrarInfo(symbol, registrarInterface);
     }
 
-    private sealed class Analyzer
+    private sealed class Analyzer(Compilation compilation)
     {
-        private readonly Compilation _compilation;
-        public Analyzer(Compilation compilation)
-        {
-            _compilation = compilation;
-        }
-
         public Model Analyze(ImmutableArray<RegistrarInfo> registrars)
         {
             var diags = ImmutableArray.CreateBuilder<Diagnostic>();
@@ -79,80 +72,65 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
 
             foreach (var reg in registrars)
             {
-                var iface = reg.Interface;
-                var g = iface.TypeArguments[0];
-                var p = iface.TypeArguments[1];
-                if (groupOptions is null) { groupOptions = g; permOptions = p; }
+                var @interface = reg.Interface;
+                var g = @interface.TypeArguments[0];
+                var p = @interface.TypeArguments[1];
+                if (groupOptions is null)
+                {
+                    groupOptions = g;
+                    permOptions = p;
+                }
                 else
                 {
                     if (!SymbolEqualityComparer.Default.Equals(groupOptions, g) ||
                         !SymbolEqualityComparer.Default.Equals(permOptions!, p))
                     {
-                        diags.Add(Diagnostic.Create(Diagnostics.InconsistentOptionsTypes, reg.Symbol.Locations.FirstOrDefault()));
-                        return new Model(_compilation, groupOptions!, permOptions!, ImmutableArray<GroupDef>.Empty, diags.ToImmutable(), hasFatal: true);
+                        diags.Add(Diagnostic.Create(Diagnostics.InconsistentOptionsTypes,
+                            reg.Symbol.Locations.FirstOrDefault()));
+                        return new Model(compilation, groupOptions, permOptions!, ImmutableArray<GroupDef>.Empty,
+                            diags.ToImmutable(), hasFatal: true);
                     }
                 }
 
-                var registerMethod = reg.Symbol.GetMembers().OfType<IMethodSymbol>().FirstOrDefault(m => m.Name == "Register" && m.Parameters.Length == 1);
+                var registerMethod = reg.Symbol.GetMembers().OfType<IMethodSymbol>()
+                    .FirstOrDefault(m => m.Name == "Register" && m.Parameters.Length == 1);
                 if (registerMethod is null)
                 {
-                    diags.Add(Diagnostic.Create(Diagnostics.MissingRegisterMethod, reg.Symbol.Locations.FirstOrDefault()));
+                    diags.Add(Diagnostic.Create(Diagnostics.MissingRegisterMethod,
+                        reg.Symbol.Locations.FirstOrDefault()));
                     continue;
                 }
 
                 // Try to find the method syntax
                 foreach (var decl in registerMethod.DeclaringSyntaxReferences)
                 {
-                    if (decl.GetSyntax() is MethodDeclarationSyntax mds)
-                    {
-                        var groups = ParseRegisterBody(mds);
-                        allGroups.AddRange(groups);
-                    }
+                    if (decl.GetSyntax() is not MethodDeclarationSyntax mds) continue;
+                    var groups = ParseRegisterBody(mds);
+                    allGroups.AddRange(groups);
                 }
             }
 
-            return new Model(_compilation, groupOptions!, permOptions!, allGroups.ToImmutableArray(), diags.ToImmutable(), hasFatal: false);
+            return new Model(compilation, groupOptions!, permOptions!, allGroups.ToImmutableArray(),
+                diags.ToImmutable(), hasFatal: false);
         }
 
         private IEnumerable<GroupDef> ParseRegisterBody(MethodDeclarationSyntax methodSyntax)
         {
-            var semanticModel = _compilation.GetSemanticModel(methodSyntax.SyntaxTree);
+            var semanticModel = compilation.GetSemanticModel(methodSyntax.SyntaxTree);
             if (methodSyntax.Body is null && methodSyntax.ExpressionBody is null)
                 yield break;
 
-            var root = (SyntaxNode)(methodSyntax.Body ?? (SyntaxNode)methodSyntax.ExpressionBody!);
+            var root = methodSyntax.Body ?? (SyntaxNode)methodSyntax.ExpressionBody!;
             var groupsRoot = new List<GroupDef>();
-            // Helper for de-duplication
-            GroupDef GetOrAddGroup(GroupDef? parent, string name, Dictionary<string, ConstValue> props)
-            {
-                if (parent is null)
-                {
-                    var existing = groupsRoot.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.Ordinal));
-                    if (existing is not null) return existing;
-                    var created = new GroupDef(name, props, new List<PermissionDef>(), new List<GroupDef>());
-                    groupsRoot.Add(created);
-                    return created;
-                }
-                else
-                {
-                    var existing = parent.Children.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.Ordinal));
-                    if (existing is not null) return existing;
-                    var created = new GroupDef(name, props, new List<PermissionDef>(), new List<GroupDef>());
-                    parent.Children.Add(created);
-                    return created;
-                }
-            }
-            void AddPermissionIfMissing(GroupDef parent, string name, Dictionary<string, ConstValue> props)
-            {
-                if (parent.Permissions.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal))) return;
-                parent.Permissions.Add(new PermissionDef(name, props));
-            }
 
             foreach (var stmt in root.DescendantNodes().OfType<ExpressionStatementSyntax>())
             {
                 if (stmt.Expression is not InvocationExpressionSyntax invRoot) continue;
                 var calls = FlattenCalls(invRoot).ToList();
-                if (!calls.Any(c => c.Expression is MemberAccessExpressionSyntax maesX && maesX.Name.Identifier.Text == "DefineGroup"))
+                if (!calls.Any(c => c.Expression is MemberAccessExpressionSyntax
+                    {
+                        Name.Identifier.Text: "DefineGroup"
+                    }))
                     continue;
 
                 var stack = new Stack<GroupDef>();
@@ -161,138 +139,184 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                 {
                     if (call.Expression is not MemberAccessExpressionSyntax maes) continue;
                     var methodName = maes.Name.Identifier.Text;
-                    if (methodName == "DefineGroup")
+                    switch (methodName)
                     {
-                        var args = call.ArgumentList.Arguments;
-                        if (args.Count == 0) continue;
-                        var groupName = GetConstString(semanticModel, args[0].Expression);
-                        if (groupName is null) continue;
-                        var groupProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
-                        if (args.Count >= 2)
+                        case "DefineGroup":
                         {
-                            ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, groupProps);
+                            var args = call.ArgumentList.Arguments;
+                            if (args.Count == 0) continue;
+                            var groupName = GetConstString(semanticModel, args[0].Expression);
+                            if (groupName is null) continue;
+                            var groupProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+                            if (args.Count >= 2)
+                            {
+                                ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, groupProps);
+                            }
+
+                            var parent = stack.Count == 0 ? null : stack.Peek();
+                            var grp = GetOrAddGroup(parent, groupName, groupProps);
+                            stack.Push(grp);
+                            break;
                         }
-                        var parent = stack.Count == 0 ? null : stack.Peek();
-                        var grp = GetOrAddGroup(parent, groupName, groupProps);
-                        stack.Push(grp);
-                    }
-                    else if (methodName == "AddPermission")
-                    {
-                        if (stack.Count == 0) continue; // skip if no current group
-                        var args = call.ArgumentList.Arguments;
-                        if (args.Count == 0) continue;
-                        var permName = GetConstString(semanticModel, args[0].Expression);
-                        if (permName is null) continue;
-                        var permProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
-                        if (args.Count >= 2)
+                        case "AddPermission" when stack.Count == 0:
+                            continue; // skip if no current group
+                        case "AddPermission":
                         {
-                            ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, permProps);
+                            var args = call.ArgumentList.Arguments;
+                            if (args.Count == 0) continue;
+                            var permName = GetConstString(semanticModel, args[0].Expression);
+                            if (permName is null) continue;
+                            var permProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+                            if (args.Count >= 2)
+                            {
+                                ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, permProps);
+                            }
+
+                            AddPermissionIfMissing(stack.Peek(), permName, permProps);
+                            break;
                         }
-                        AddPermissionIfMissing(stack.Peek(), permName, permProps);
-                    }
-                    else if (methodName == "Then")
-                    {
-                        if (stack.Count > 0) stack.Pop();
+                        case "Then":
+                        {
+                            if (stack.Count > 0) stack.Pop();
+                            break;
+                        }
                     }
                 }
             }
 
             foreach (var g in groupsRoot)
                 yield return g;
+            yield break;
+
+            void AddPermissionIfMissing(GroupDef parent, string name, Dictionary<string, ConstValue> props)
+            {
+                if (parent.Permissions.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal))) return;
+                parent.Permissions.Add(new PermissionDef(name, props));
+            }
+
+            // Helper for de-duplication
+            GroupDef GetOrAddGroup(GroupDef? parent, string name, Dictionary<string, ConstValue> props)
+            {
+                if (parent is null)
+                {
+                    var existing =
+                        groupsRoot.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.Ordinal));
+                    if (existing is not null) return existing;
+                    var created = new GroupDef(name, props, [], []);
+                    groupsRoot.Add(created);
+                    return created;
+                }
+                else
+                {
+                    var existing =
+                        parent.Children.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.Ordinal));
+                    if (existing is not null) return existing;
+                    var created = new GroupDef(name, props, [], []);
+                    parent.Children.Add(created);
+                    return created;
+                }
+            }
         }
 
         private static IEnumerable<InvocationExpressionSyntax> FlattenCalls(InvocationExpressionSyntax root)
         {
             var stack = new Stack<InvocationExpressionSyntax>();
-            ExpressionSyntax? cur = root;
-            while (cur is InvocationExpressionSyntax inv && inv.Expression is MemberAccessExpressionSyntax maes)
+            ExpressionSyntax cur = root;
+            while (cur is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax maes } inv)
             {
                 stack.Push(inv);
                 cur = maes.Expression;
             }
-            return stack; // Stack enumerates from last pushed to first, which in our loop yields earliest-to-latest calls
+
+            return
+                stack; // Stack enumerates from last pushed to first, which in our loop yields earliest-to-latest calls
         }
 
-        private static InvocationExpressionSyntax GetOutermostInvocation(InvocationExpressionSyntax node)
+        private static void ExtractAssignmentsFromLambda(SemanticModel semanticModel, ExpressionSyntax expr,
+            Dictionary<string, ConstValue> into)
         {
-            SyntaxNode cur = node;
-            while (cur.Parent is InvocationExpressionSyntax parent && parent.Expression is MemberAccessExpressionSyntax)
+            switch (expr)
             {
-                cur = parent;
-            }
-            return (InvocationExpressionSyntax)cur;
-        }
-
-        private static void ExtractAssignmentsFromLambda(SemanticModel semanticModel, ExpressionSyntax expr, Dictionary<string, ConstValue> into)
-        {
-            // Expect a simple lambda like: options => { options.Prop = <literal>; ... }
-            // or: o => o.Prop = 123
-            if (expr is ParenthesizedLambdaExpressionSyntax ples)
-            {
-                var paramName = ples.ParameterList.Parameters.FirstOrDefault()?.Identifier.Text;
-                if (paramName is null) return;
-                ExtractAssignmentsFromLambdaBody(semanticModel, paramName, ples.Body, into);
-            }
-            else if (expr is SimpleLambdaExpressionSyntax sles)
-            {
-                var paramName = sles.Parameter.Identifier.Text;
-                ExtractAssignmentsFromLambdaBody(semanticModel, paramName, sles.Body, into);
-            }
-        }
-
-        private static void ExtractAssignmentsFromLambdaBody(SemanticModel semanticModel, string paramName, CSharpSyntaxNode body, Dictionary<string, ConstValue> into)
-        {
-            if (body is BlockSyntax block)
-            {
-                foreach (var stmt in block.Statements.OfType<ExpressionStatementSyntax>())
+                // Expect a simple lambda like: options => { options.Prop = <literal>; ... }
+                // or: o => o.Prop = 123
+                case ParenthesizedLambdaExpressionSyntax syntax:
                 {
-                    if (stmt.Expression is AssignmentExpressionSyntax assign)
+                    var paramName = syntax.ParameterList.Parameters.FirstOrDefault()?.Identifier.Text;
+                    if (paramName is null) return;
+                    ExtractAssignmentsFromLambdaBody(semanticModel, paramName, syntax.Body, into);
+                    break;
+                }
+                case SimpleLambdaExpressionSyntax sles:
+                {
+                    var paramName = sles.Parameter.Identifier.Text;
+                    ExtractAssignmentsFromLambdaBody(semanticModel, paramName, sles.Body, into);
+                    break;
+                }
+            }
+        }
+
+        private static void ExtractAssignmentsFromLambdaBody(SemanticModel semanticModel, string paramName,
+            CSharpSyntaxNode body, Dictionary<string, ConstValue> into)
+        {
+            switch (body)
+            {
+                case BlockSyntax block:
+                {
+                    foreach (var stmt in block.Statements.OfType<ExpressionStatementSyntax>())
+                    {
+                        if (stmt.Expression is AssignmentExpressionSyntax assign)
+                        {
+                            TryCaptureAssignment(semanticModel, paramName, assign, into);
+                        }
+                    }
+
+                    break;
+                }
+                case ExpressionSyntax expr:
+                {
+                    if (expr is AssignmentExpressionSyntax assign)
                     {
                         TryCaptureAssignment(semanticModel, paramName, assign, into);
                     }
-                }
-            }
-            else if (body is ExpressionSyntax expr)
-            {
-                if (expr is AssignmentExpressionSyntax assign)
-                {
-                    TryCaptureAssignment(semanticModel, paramName, assign, into);
+
+                    break;
                 }
             }
         }
 
-        private static void TryCaptureAssignment(SemanticModel semanticModel, string paramName, AssignmentExpressionSyntax assign, Dictionary<string, ConstValue> into)
+        private static void TryCaptureAssignment(SemanticModel semanticModel, string paramName,
+            AssignmentExpressionSyntax assign, Dictionary<string, ConstValue> into)
         {
-            if (assign.Left is MemberAccessExpressionSyntax maes && maes.Expression is IdentifierNameSyntax id && id.Identifier.Text == paramName)
+            if (assign.Left is not MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax id } maes ||
+                id.Identifier.Text != paramName) return;
+            var propName = maes.Name.Identifier.Text;
+            var value = GetConstValue(semanticModel, assign.Right);
+            if (value is not null)
             {
-                var propName = maes.Name.Identifier.Text;
-                var value = GetConstValue(semanticModel, assign.Right);
-                if (value is not null)
-                {
-                    into[propName] = value;
-                }
+                into[propName] = value;
             }
         }
 
         private static string? GetConstString(SemanticModel semanticModel, ExpressionSyntax expr)
         {
             var cv = GetConstValue(semanticModel, expr);
-            return cv?.Kind == ConstKind.String && cv.Value is string s ? s : null;
+            return cv is { Kind: ConstKind.String, Value: string s } ? s : null;
         }
 
         private static ConstValue? GetConstValue(SemanticModel semanticModel, ExpressionSyntax expr)
         {
-            expr = (expr as InvocationExpressionSyntax)?.Expression as ExpressionSyntax ?? expr;
+            expr = (expr as InvocationExpressionSyntax)?.Expression ?? expr;
             var c = semanticModel.GetConstantValue(expr);
-            if (c.HasValue)
+            if (!c.HasValue)
+                return expr.IsKind(SyntaxKind.NullLiteralExpression) ? new ConstValue(ConstKind.Null, null) : null;
+            return c.Value switch
             {
-                if (c.Value is string s) return new ConstValue(ConstKind.String, s);
-                if (c.Value is bool b) return new ConstValue(ConstKind.Bool, b);
-                if (c.Value is int i) return new ConstValue(ConstKind.Int, i);
-                if (c.Value is double d) return new ConstValue(ConstKind.Double, d);
-            }
-            if (expr.IsKind(SyntaxKind.NullLiteralExpression)) return new ConstValue(ConstKind.Null, null);
-            return null;
+                string s => new ConstValue(ConstKind.String, s),
+                bool b => new ConstValue(ConstKind.Bool, b),
+                int i => new ConstValue(ConstKind.Int, i),
+                double d => new ConstValue(ConstKind.Double, d),
+                _ => expr.IsKind(SyntaxKind.NullLiteralExpression) ? new ConstValue(ConstKind.Null, null) : null
+            };
         }
     }
 
@@ -301,7 +325,8 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         public static readonly DiagnosticDescriptor InconsistentOptionsTypes = new(
             id: "FP001",
             title: "Inconsistent option types across registrars",
-            messageFormat: "All IPermissionRegistrar implementations must use the same TGroupOptions and TPermissionOptions types within one project",
+            messageFormat:
+            "All IPermissionRegistrar implementations must use the same TGroupOptions and TPermissionOptions types within one project",
             category: "FluentPermissions",
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -315,38 +340,37 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             isEnabledByDefault: true);
     }
 
-    private sealed class RegistrarInfo
+    private sealed class RegistrarInfo(INamedTypeSymbol symbol, INamedTypeSymbol @interface)
     {
-        public INamedTypeSymbol Symbol { get; }
-        public INamedTypeSymbol Interface { get; }
-        public RegistrarInfo(INamedTypeSymbol symbol, INamedTypeSymbol @interface)
-        {
-            Symbol = symbol;
-            Interface = @interface;
-        }
+        public INamedTypeSymbol Symbol { get; } = symbol;
+        public INamedTypeSymbol Interface { get; } = @interface;
     }
 
-    private enum ConstKind { String, Bool, Int, Double, Null }
-    private sealed class ConstValue
+    private enum ConstKind
     {
-        public ConstKind Kind { get; }
-        public object? Value { get; }
-        public ConstValue(ConstKind kind, object? value)
-        {
-            Kind = kind;
-            Value = value;
-        }
+        String,
+        Bool,
+        Int,
+        Double,
+        Null
+    }
+
+    private sealed class ConstValue(ConstKind kind, object? value)
+    {
+        public ConstKind Kind { get; } = kind;
+        public object? Value { get; } = value;
+
         public string ToCSharpLiteral()
         {
-            switch (Kind)
+            return Kind switch
             {
-                case ConstKind.String: return EscapeString((string?)Value);
-                case ConstKind.Bool: return (bool)Value! ? "true" : "false";
-                case ConstKind.Int: return ((int)Value!).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                case ConstKind.Double: return ((double)Value!).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                case ConstKind.Null: return "null";
-                default: return "default";
-            }
+                ConstKind.String => EscapeString((string?)Value),
+                ConstKind.Bool => (bool)Value! ? "true" : "false",
+                ConstKind.Int => ((int)Value!).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ConstKind.Double => ((double)Value!).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ConstKind.Null => "null",
+                _ => "default"
+            };
         }
     }
 
@@ -370,67 +394,54 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                     break;
             }
         }
+
         sb.Append('"');
         return sb.ToString();
     }
 
-    private sealed class OptionProperty
+    private sealed class OptionProperty(string name, ITypeSymbol type)
     {
-        public string Name { get; }
-        public ITypeSymbol Type { get; }
-        public OptionProperty(string name, ITypeSymbol type)
-        {
-            Name = name;
-            Type = type;
-        }
-        public string TypeName { get { return Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat); } }
-        public string DefaultLiteral { get { return Type.IsReferenceType ? "null" : "default"; } }
+        public string Name { get; } = name;
+        private ITypeSymbol Type { get; } = type;
+
+        public string TypeName => Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        public string DefaultLiteral => Type.IsReferenceType ? "null" : "default";
     }
 
-    private sealed class PermissionDef
+    private sealed class PermissionDef(string name, Dictionary<string, ConstValue> props)
     {
-        public string Name { get; }
-        public Dictionary<string, ConstValue> Props { get; }
-        public PermissionDef(string name, Dictionary<string, ConstValue> props)
-        {
-            Name = name;
-            Props = props;
-        }
+        public string Name { get; } = name;
+        public Dictionary<string, ConstValue> Props { get; } = props;
     }
 
-    private sealed class GroupDef
+    private sealed class GroupDef(
+        string name,
+        Dictionary<string, ConstValue> props,
+        List<PermissionDef> permissions,
+        List<GroupDef> children)
     {
-        public string Name { get; }
-        public Dictionary<string, ConstValue> Props { get; }
-        public List<PermissionDef> Permissions { get; }
-        public List<GroupDef> Children { get; }
-        public GroupDef(string name, Dictionary<string, ConstValue> props, List<PermissionDef> permissions, List<GroupDef> children)
-        {
-            Name = name;
-            Props = props;
-            Permissions = permissions;
-            Children = children;
-        }
+        public string Name { get; } = name;
+        public Dictionary<string, ConstValue> Props { get; } = props;
+        public List<PermissionDef> Permissions { get; } = permissions;
+        public List<GroupDef> Children { get; } = children;
     }
 
-    private sealed class Model
+    private sealed class Model(
+        Compilation compilation,
+        ITypeSymbol groupOptions,
+        ITypeSymbol permissionOptions,
+        ImmutableArray<GroupDef> groups,
+        ImmutableArray<Diagnostic> diagnostics,
+        bool hasFatal)
     {
-        public Compilation Compilation { get; private set; }
-        public ITypeSymbol GroupOptions { get; private set; }
-        public ITypeSymbol PermissionOptions { get; private set; }
-        public ImmutableArray<GroupDef> Groups { get; private set; }
-        public ImmutableArray<Diagnostic> Diagnostics { get; private set; }
-        public bool HasFatal { get; private set; }
+        public Compilation Compilation { get; private set; } = compilation;
+        public ITypeSymbol GroupOptions { get; private set; } = groupOptions;
+        public ITypeSymbol PermissionOptions { get; private set; } = permissionOptions;
+        public ImmutableArray<GroupDef> Groups { get; private set; } = groups;
 
-        public Model(Compilation compilation, ITypeSymbol groupOptions, ITypeSymbol permissionOptions, ImmutableArray<GroupDef> groups, ImmutableArray<Diagnostic> diagnostics, bool hasFatal)
-        {
-            Compilation = compilation;
-            GroupOptions = groupOptions;
-            PermissionOptions = permissionOptions;
-            Groups = groups;
-            Diagnostics = diagnostics;
-            HasFatal = hasFatal;
-        }
+        // ReSharper disable once MemberHidesStaticFromOuterClass
+        public ImmutableArray<Diagnostic> Diagnostics { get; private set; } = diagnostics;
+        public bool HasFatal { get; private set; } = hasFatal;
     }
 
     private static class SourceBuilders
@@ -455,14 +466,18 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             {
                 sb.Append("    public ").Append(prop.TypeName).Append(' ').Append(prop.Name).AppendLine(" { get; }");
             }
-            sb.AppendLine("    public System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; internal set; }");
-            sb.AppendLine("    public System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> Children { get; internal set; }");
+
+            sb.AppendLine(
+                "    public System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; internal set; }");
+            sb.AppendLine(
+                "    public System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> Children { get; internal set; }");
             // ctor
             sb.Append("    internal PermissionGroupInfo(string name, string fullName, string key");
             foreach (var prop in gProps)
             {
                 sb.Append(", ").Append(prop.TypeName).Append(' ').Append(ToCamel(prop.Name));
             }
+
             sb.AppendLine(")");
             sb.AppendLine("    {");
             sb.AppendLine("        Name = name;");
@@ -472,6 +487,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             {
                 sb.Append("        ").Append(prop.Name).Append(" = ").Append(ToCamel(prop.Name)).AppendLine(";");
             }
+
             sb.AppendLine("        Permissions = System.Array.Empty<PermissionItemInfo>();");
             sb.AppendLine("        Children = System.Array.Empty<PermissionGroupInfo>();");
             sb.AppendLine("    }");
@@ -489,14 +505,17 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             {
                 sb.Append("    public ").Append(prop.TypeName).Append(' ').Append(prop.Name).AppendLine(" { get; }");
             }
+
             // implicit conversion
-            sb.AppendLine("    public static implicit operator string?(PermissionItemInfo permission) => permission?.Name;");
+            sb.AppendLine(
+                "    public static implicit operator string?(PermissionItemInfo permission) => permission?.Name;");
             // ctor
             sb.Append("    internal PermissionItemInfo(string name, string groupName, string fullName, string key");
             foreach (var prop in pProps)
             {
                 sb.Append(", ").Append(prop.TypeName).Append(' ').Append(ToCamel(prop.Name));
             }
+
             sb.AppendLine(")");
             sb.AppendLine("    {");
             sb.AppendLine("        Name = name;");
@@ -507,6 +526,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             {
                 sb.Append("        ").Append(prop.Name).Append(" = ").Append(ToCamel(prop.Name)).AppendLine(";");
             }
+
             sb.AppendLine("    }");
             sb.AppendLine("    public override string ToString() => Name;");
             sb.AppendLine("}");
@@ -535,7 +555,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             // Recursive declare fields
             foreach (var root in model.Groups)
             {
-                DeclareGroupAndChildren(sb, root, new List<string>(), gProps, pProps, keys);
+                DeclareGroupAndChildren(sb, root, [], gProps, pProps, keys);
             }
 
             // Static ctor: link graph
@@ -544,31 +564,37 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("    {");
             foreach (var root in model.Groups)
             {
-                LinkGroup(sb, root, new List<string>());
+                LinkGroup(sb, root, []);
             }
+
             sb.AppendLine("    }");
 
             // Nested classes per group
             sb.AppendLine();
             foreach (var root in model.Groups)
             {
-                BuildNestedAccessors(sb, root, new List<string>());
+                BuildNestedAccessors(sb, root, []);
             }
 
             sb.AppendLine();
             // Access helpers
-            sb.AppendLine("    public static global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> GetAllGroups() => new PermissionGroupInfo[] {");
-            sb.Append("        ").Append(string.Join(", ", model.Groups.Select(g => FieldNameForGroup(new List<string>(), g.Name)))).AppendLine();
+            sb.AppendLine(
+                "    public static global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> GetAllGroups() => new PermissionGroupInfo[] {");
+            sb.Append("        ")
+                .Append(string.Join(", ", model.Groups.Select(g => FieldNameForGroup([], g.Name))))
+                .AppendLine();
             sb.AppendLine("    };");
 
             // Flat Keys class
             sb.AppendLine();
             sb.AppendLine("    public static class Keys");
             sb.AppendLine("    {");
-            foreach (var (constName, keyValue) in keys.OrderBy(k => k.ConstName, System.StringComparer.Ordinal))
+            foreach (var (constName, keyValue) in keys.OrderBy(k => k.ConstName, StringComparer.Ordinal))
             {
-                sb.Append("        public const string ").Append(constName).Append(" = ").Append(EscapeString(keyValue)).AppendLine(";");
+                sb.Append("        public const string ").Append(constName).Append(" = ").Append(EscapeString(keyValue))
+                    .AppendLine(";");
             }
+
             sb.AppendLine("    }");
 
             sb.AppendLine("}");
@@ -576,7 +602,8 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             return sb.ToString();
         }
 
-        private static void DeclareGroupAndChildren(StringBuilder sb, GroupDef group, List<string> path, List<OptionProperty> gProps, List<OptionProperty> pProps, List<(string ConstName, string KeyValue)> keys)
+        private static void DeclareGroupAndChildren(StringBuilder sb, GroupDef group, List<string> path,
+            List<OptionProperty> gProps, List<OptionProperty> pProps, List<(string ConstName, string KeyValue)> keys)
         {
             var newPath = new List<string>(path) { group.Name };
             var dotted = string.Join(".", newPath);
@@ -594,6 +621,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                 group.Props.TryGetValue(gp.Name, out var val);
                 sb.Append(", ").Append(val?.ToCSharpLiteral() ?? gp.DefaultLiteral);
             }
+
             sb.AppendLine(");");
 
             // Permissions fields
@@ -615,6 +643,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                     perm.Props.TryGetValue(pp.Name, out var val);
                     sb.Append(", ").Append(val?.ToCSharpLiteral() ?? pp.DefaultLiteral);
                 }
+
                 sb.AppendLine(");");
                 // Collect Keys constants
                 keys.Add((permFull, permKey));
@@ -662,7 +691,8 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             var newPath = new List<string>(path) { group.Name };
             sb.Append("    public static class ").Append(SafeIdent(group.Name)).AppendLine();
             sb.AppendLine("    {");
-            sb.Append("        public static readonly PermissionGroupInfo Group = ").Append(FieldNameForGroup(path, group.Name)).AppendLine(";");
+            sb.Append("        public static readonly PermissionGroupInfo Group = ")
+                .Append(FieldNameForGroup(path, group.Name)).AppendLine(";");
 
             // Names (dotted) constants for permissions
             if (group.Permissions.Count > 0)
@@ -676,6 +706,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                     sb.Append("            public const string ").Append(SafeIdent(p.Name)).Append(" = ")
                         .Append(EscapeString(dotted)).AppendLine(";");
                 }
+
                 sb.AppendLine("        }");
             }
 
@@ -707,14 +738,14 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
 
         private static string ComputeSha256Hex(string input)
         {
-            using (var sha = System.Security.Cryptography.SHA256.Create())
-            {
-                var bytes = System.Text.Encoding.UTF8.GetBytes(input);
-                var hash = sha.ComputeHash(bytes);
-                var sb = new StringBuilder(hash.Length * 2);
-                for (int i = 0; i < hash.Length; i++) sb.Append(hash[i].ToString("x2"));
-                return sb.ToString();
-            }
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(input);
+            var hash = sha.ComputeHash(bytes);
+            var sb = new StringBuilder(hash.Length * 2);
+            foreach (var t in hash)
+                sb.Append(t.ToString("x2"));
+
+            return sb.ToString();
         }
 
         private static List<OptionProperty> GetOptionProperties(ITypeSymbol options)
@@ -731,7 +762,8 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                     result.Add(new OptionProperty(p.Name, p.Type));
                 }
             }
-            result.Sort((a,b) => string.CompareOrdinal(a.Name, b.Name));
+
+            result.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
             return result;
         }
 
@@ -756,6 +788,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             {
                 sb.Append(SyntaxFacts.IsIdentifierPartCharacter(ch) ? ch : '_');
             }
+
             return sb.ToString();
         }
     }
