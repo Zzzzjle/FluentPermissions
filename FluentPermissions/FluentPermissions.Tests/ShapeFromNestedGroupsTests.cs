@@ -99,8 +99,8 @@ public class ShapeFromNestedGroupsTests
         Assert.Contains("Roles", childNames);
 
         // Ensure Roles is under System, not under Users
-        Assert.True(groupsByKey.Contains("System.Roles"));
-        Assert.False(groupsByKey.Contains("System.Users.Roles"));
+    Assert.True(groupsByKey.Contains("System_Roles"));
+    Assert.False(groupsByKey.Contains("System_Users_Roles"));
 
         // Keys class shouldn't contain System_Users_Roles constant
         var keysType = appPermissionsType.GetNestedType("Keys");
@@ -112,7 +112,7 @@ public class ShapeFromNestedGroupsTests
         var sysOrderProp = system.GetType().GetProperty("Order");
         Assert.NotNull(sysOrderProp);
         Assert.Equal(10, (int)sysOrderProp!.GetValue(system)!);
-        var reports = groupsByKey["Reports"]!;
+    var reports = groupsByKey["Reports"]!;
         var repOrderProp = reports.GetType().GetProperty("Order");
         Assert.NotNull(repOrderProp);
         Assert.Equal(20, (int)repOrderProp!.GetValue(reports)!);

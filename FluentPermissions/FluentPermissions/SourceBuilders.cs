@@ -43,7 +43,6 @@ internal static class SourceBuilders
             "        public global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> SubGroups { get; }");
         sb.AppendLine(
             "        public global::System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; }");
-        sb.AppendLine("        public string FullName => Key.Replace('.', '_');");
         sb.AppendLine(
             "        public PermissionGroupInfo(string key, string logicalName, string? displayName, string? description,");
         sb.AppendLine("            string? parentKey,");
@@ -97,7 +96,6 @@ internal static class SourceBuilders
         }
 
         sb.AppendLine("        public string GroupKey { get; }");
-        sb.AppendLine("        public string FullName => GroupKey.Replace('.', '_') + \"_\" + LogicalName;");
         sb.AppendLine(
             "        public PermissionItemInfo(string key, string logicalName, string? displayName, string? description,");
         // constructor params for permission option props
@@ -223,7 +221,7 @@ internal static class SourceBuilders
 
         string EmitCtorGroup(StringBuilder esb, GroupDef g, string? parentKey, int indent)
         {
-            var key = parentKey is null ? g.LogicalName : parentKey + "." + g.LogicalName;
+            var key = parentKey is null ? g.LogicalName : parentKey + "_" + g.LogicalName;
             var pad = new string(' ', indent);
             // emit children first
             var childVarNames = new List<string>();
@@ -259,7 +257,7 @@ internal static class SourceBuilders
                     first = false;
                     var pArgs = new StringBuilder();
                     pArgs.Append(
-                        $"\"{key}.{p.LogicalName}\", \"{p.LogicalName}\", {ToNullableLiteral(p.DisplayName)}, {ToNullableLiteral(p.Description)}");
+                        $"\"{key}_{p.LogicalName}\", \"{p.LogicalName}\", {ToNullableLiteral(p.DisplayName)}, {ToNullableLiteral(p.Description)}");
                     foreach (var prop in model.PermOptionProps)
                     {
                         var has = p.Props.TryGetValue(prop.Name, out var val);
@@ -279,7 +277,7 @@ internal static class SourceBuilders
             // emit group with typed options and readonly children/perms
             var gArgs = new StringBuilder();
             gArgs.Append(
-                $"\"{key}\", \"{g.LogicalName}\", {ToNullableLiteral(g.DisplayName)}, {ToNullableLiteral(g.Description)}, {(parentKey is null ? "null" : "\"" + parentKey + "\"")}");
+                $"\"{key}\", \"{g.LogicalName}\", {ToNullableLiteral(g.DisplayName)}, {ToNullableLiteral(g.Description)}, {(parentKey is null ? "null" : $"\"{parentKey}\"")}");
             foreach (var prop in model.GroupOptionProps)
             {
                 var has = g.Props.TryGetValue(prop.Name, out var val);
@@ -297,20 +295,19 @@ internal static class SourceBuilders
 
         void EmitKeysForGroup(StringBuilder esb, GroupDef g, string? parentKey, int indent)
         {
-            var key = parentKey is null ? g.LogicalName : parentKey + "." + g.LogicalName;
+            var key = parentKey is null ? g.LogicalName : parentKey + "_" + g.LogicalName;
             var pad = new string(' ', indent);
-            var flat = key.Replace('.', '_');
-            esb.AppendLine(pad + $"public const string {SafeIdent(flat)} = \"{key}\";");
+            esb.AppendLine(pad + $"public const string {SafeIdent(key)} = \"{key}\";");
             foreach (var p in g.Permissions)
                 esb.AppendLine(pad +
-                               $"public const string {SafeIdent(flat + "_" + p.LogicalName)} = \"{key}.{p.LogicalName}\";");
+                               $"public const string {SafeIdent(key + "_" + p.LogicalName)} = \"{key}_{p.LogicalName}\";");
             foreach (var c in g.Children)
                 EmitKeysForGroup(esb, c, key, indent);
         }
 
         void EmitGroupClass(StringBuilder esb, GroupDef g, string? parentKey, int indent)
         {
-            var key = parentKey is null ? g.LogicalName : parentKey + "." + g.LogicalName;
+            var key = parentKey is null ? g.LogicalName : parentKey + "_" + g.LogicalName;
             var pad = new string(' ', indent);
             esb.AppendLine(pad + $"public static class {SafeIdent(g.LogicalName)}");
             esb.AppendLine(pad + "{");
@@ -318,7 +315,7 @@ internal static class SourceBuilders
                            $"    public static readonly PermissionModels.PermissionGroupInfo Group = GroupsByKey[\"{key}\"]; ");
             foreach (var p in g.Permissions)
                 esb.AppendLine(pad +
-                               $"    public static readonly PermissionModels.PermissionItemInfo {SafeIdent(p.LogicalName)} = PermsByKey[\"{key}.{p.LogicalName}\"]; ");
+                               $"    public static readonly PermissionModels.PermissionItemInfo {SafeIdent(p.LogicalName)} = PermsByKey[\"{key}_{p.LogicalName}\"]; ");
             foreach (var c in g.Children)
                 EmitGroupClass(esb, c, key, indent + 4);
             esb.AppendLine(pad + "}");
@@ -345,5 +342,4 @@ internal static class SourceBuilders
         return sb.ToString();
     }
 
-    // Removed ToOptionsInit: options are now strong-typed constructor parameters.
 }

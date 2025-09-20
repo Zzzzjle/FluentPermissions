@@ -37,20 +37,20 @@ public class DeepNestingTests
         var aType = aGroup.GetType();
         var keyProp = aType.GetProperty("Key")!;
         var parentKeyProp = aType.GetProperty("ParentKey")!;
-        Assert.Null(parentKeyProp.GetValue(aGroup)); // root has no parent
-        Assert.Equal("A", keyProp.GetValue(aGroup));
+    Assert.Null(parentKeyProp.GetValue(aGroup)); // root has no parent
+    Assert.Equal("A", keyProp.GetValue(aGroup));
 
         var a1Class = aClass.GetNestedType("A1");
         Assert.NotNull(a1Class);
         var a1Group = a1Class.GetField("Group")!.GetValue(null)!;
-        Assert.Equal("A.A1", keyProp.GetValue(a1Group));
-        Assert.Equal("A", parentKeyProp.GetValue(a1Group));
+    Assert.Equal("A_A1", keyProp.GetValue(a1Group));
+    Assert.Equal("A", parentKeyProp.GetValue(a1Group));
 
         var a1AClass = a1Class.GetNestedType("A1a");
         Assert.NotNull(a1AClass);
         var a1AGroup = a1AClass.GetField("Group")!.GetValue(null)!;
-        Assert.Equal("A.A1.A1a", keyProp.GetValue(a1AGroup));
-        Assert.Equal("A.A1", parentKeyProp.GetValue(a1AGroup));
+    Assert.Equal("A_A1_A1a", keyProp.GetValue(a1AGroup));
+    Assert.Equal("A_A1", parentKeyProp.GetValue(a1AGroup));
 
         // Permission X under A.A1.A1a
         var xField = a1AClass.GetField("X");
@@ -59,36 +59,36 @@ public class DeepNestingTests
         var pType = xPerm.GetType();
         var pGroupKey = pType.GetProperty("GroupKey")!;
         var pKey = pType.GetProperty("Key")!;
-        Assert.Equal("A.A1.A1a", pGroupKey.GetValue(xPerm));
-        Assert.Equal("A.A1.A1a.X", pKey.GetValue(xPerm));
+    Assert.Equal("A_A1_A1a", pGroupKey.GetValue(xPerm));
+    Assert.Equal("A_A1_A1a_X", pKey.GetValue(xPerm));
 
         // Keys constants exist
         var keysClass = appPermissionsType.GetNestedType("Keys");
         Assert.NotNull(keysClass);
         var constName = "A_A1_A1a_X";
-        var kField = keysClass.GetField(constName);
-        Assert.NotNull(kField);
-        Assert.Equal("A.A1.A1a.X", (string)kField.GetValue(null)!);
+    var kField = keysClass.GetField(constName);
+    Assert.NotNull(kField);
+    Assert.Equal("A_A1_A1a_X", (string)kField.GetValue(null)!);
 
         // Second chain: B and permission Y
         var bClass = appPermissionsType.GetNestedType("B");
         Assert.NotNull(bClass);
         var bGroup = bClass.GetField("Group")!.GetValue(null)!;
-        Assert.Equal("B", keyProp.GetValue(bGroup));
+    Assert.Equal("B", keyProp.GetValue(bGroup));
         Assert.Null(parentKeyProp.GetValue(bGroup));
 
         var yField = bClass.GetField("Y");
         Assert.NotNull(yField);
         var yPerm = yField.GetValue(null)!;
-        Assert.Equal("B.Y", pKey.GetValue(yPerm));
+    Assert.Equal("B_Y", pKey.GetValue(yPerm));
 
         // GroupsByKey contains all
         var groupsByKeyField = appPermissionsType.GetField("GroupsByKey");
         Assert.NotNull(groupsByKeyField);
         var dict = (System.Collections.IDictionary)groupsByKeyField.GetValue(null)!;
-        Assert.True(dict.Contains("A"));
-        Assert.True(dict.Contains("A.A1"));
-        Assert.True(dict.Contains("A.A1.A1a"));
-        Assert.True(dict.Contains("B"));
+    Assert.True(dict.Contains("A"));
+    Assert.True(dict.Contains("A_A1"));
+    Assert.True(dict.Contains("A_A1_A1a"));
+    Assert.True(dict.Contains("B"));
     }
 }
