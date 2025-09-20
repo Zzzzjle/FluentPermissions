@@ -7,37 +7,36 @@ public class AppPermissionDefinition : IPermissionRegistrar<SampleGroupOptions, 
 {
     public void Register(PermissionBuilder<SampleGroupOptions, SamplePermissionOptions> builder)
     {
-        // @formatter:off
         builder
-            .DefineGroup("System", "系统", "核心系统设置", o =>
+            .DefineGroup("System", "系统", "核心系统设置", system =>
             {
-                o.Icon = "fa-gear";
-                o.DisplayOrder = 10;
+                system.WithOptions(options =>
+                {
+                    options.Icon = "fa-gear";
+                    options.DisplayOrder = 10;
+                });
+
+                system.DefineGroup("Users", "用户账户管理", users =>
+                {
+                    users.AddPermission("Create", "创建用户");
+                    users.AddPermission("Delete", "删除用户", "这是一个高风险操作", o => { o.IsHighRisk = true; });
+                });
+
+                system.DefineGroup("Roles", "角色管理", roles =>
+                {
+                    roles.AddPermission("Create", "创建角色");
+                    roles.AddPermission("Assign", "分配角色");
+                });
             })
-                .DefineGroup("Users", "用户账户管理", o =>
-                {
-                    o.DisplayOrder = 1;
-                })
-                    .AddPermission("Create", "创建用户")
-                    .AddPermission("Delete", "删除用户", "这是一个高风险操作", o =>
-                    {
-                        o.IsHighRisk = true;
-                    })
-                .Then()
-                .DefineGroup("Roles", "角色管理", o =>
-                {
-                    o.DisplayOrder = 2;
-                })
-                    .AddPermission("Create", "创建角色")
-                    .AddPermission("Assign", "分配角色")
-                .Then()
-            .Then()
-            .DefineGroup("Reports", "报表中心", o =>
+            .DefineGroup("Reports", reports =>
             {
-                o.Icon = "fa-chart";
-                o.DisplayOrder = 20;
-            })
-                .AddPermission("View", "查看报表")
-                .AddPermission("Export", "导出报表");
+                reports.WithOptions(options =>
+                {
+                    options.Icon = "fa-chart";
+                    options.DisplayOrder = 20;
+                });
+                reports.AddPermission("View", "查看报表");
+                reports.AddPermission("Export", "导出报表");
+            });
     }
 }

@@ -152,6 +152,33 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                             grp.DisplayName ??= parsed.DisplayName ?? parsed.LogicalName;
                             grp.Description ??= parsed.Description;
                             stack.Push(grp);
+
+                            // If this DefineGroup call uses the builder-lambda overload, process its body here
+                            var methodSymbol = semanticModel.GetSymbolInfo(call).Symbol as IMethodSymbol;
+                            if (methodSymbol is not null)
+                            {
+                                var builderLambdaArg = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
+                                if (builderLambdaArg is not null)
+                                {
+                                    ProcessBuilderLambda(grp, builderLambdaArg, semanticModel);
+                                    // Close this group scope immediately for builder-lambda overloads
+                                    if (stack.Count > 0) stack.Pop();
+                                }
+                            }
+                            break;
+                        }
+                        case "WithOptions" when stack.Count == 0:
+                            // Without a current group, ignore.
+                            break;
+                        case "WithOptions":
+                        {
+                            // Merge options assignments into the current group's properties
+                            var args = call.ArgumentList.Arguments;
+                            if (args.Count > 0)
+                            {
+                                var cur = stack.Peek();
+                                ExtractAssignmentsFromLambda(semanticModel, args[0].Expression, cur.Props);
+                            }
                             break;
                         }
                         case "AddPermission" when stack.Count == 0:
@@ -179,17 +206,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             yield break;
 
             void AddPermissionIfMissing(GroupDef parent, string name, string? displayName, string? description, Dictionary<string, ConstValue> props)
-            {
-                var existing = parent.Permissions.FirstOrDefault(p => string.Equals(p.LogicalName, name, StringComparison.Ordinal));
-                if (existing is not null)
-                {
-                    if (existing.DisplayName is null && displayName is not null) existing.DisplayName = displayName;
-                    if (existing.Description is null && description is not null) existing.Description = description;
-                    foreach (var kv in props) existing.Props[kv.Key] = kv.Value;
-                    return;
-                }
-                parent.Permissions.Add(new PermissionDef(name, displayName, description, props));
-            }
+                => AddOrUpdatePermission(parent, name, displayName, description, props);
 
             // Helper for de-duplication
             GroupDef GetOrAddGroup(GroupDef? parent, string name, Dictionary<string, ConstValue> props)
@@ -211,6 +228,138 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                     var created = new GroupDef(name, null, null, props, [], []);
                     parent.Children.Add(created);
                     return created;
+                }
+            }
+        }
+
+        private static ArgumentSyntax? GetBuilderLambdaArgumentIfAny(IMethodSymbol methodSymbol, InvocationExpressionSyntax call)
+        {
+            // find parameter of type Action<...PermissionGroupBuilder...>
+            int paramIndex = -1;
+            for (int i = 0; i < methodSymbol.Parameters.Length; i++)
+            {
+                var p = methodSymbol.Parameters[i].Type as INamedTypeSymbol;
+                if (p is null) continue;
+                if (!string.Equals(p.Name, "Action", StringComparison.Ordinal)) continue;
+                if (p.TypeArguments.Length != 1) continue;
+                var targ = p.TypeArguments[0];
+                var targName = targ.ToDisplayString();
+                if (targName.IndexOf("PermissionGroupBuilder", StringComparison.Ordinal) >= 0)
+                {
+                    paramIndex = i;
+                    break;
+                }
+            }
+
+            if (paramIndex < 0) return null;
+            var args = call.ArgumentList.Arguments;
+            if (paramIndex >= args.Count) return null;
+            return args[paramIndex];
+        }
+
+        private void ProcessBuilderLambda(GroupDef current, ArgumentSyntax lambdaArg, SemanticModel semanticModel)
+        {
+            var expr = lambdaArg.Expression;
+            CSharpSyntaxNode? body = expr switch
+            {
+                ParenthesizedLambdaExpressionSyntax ples => ples.Body,
+                SimpleLambdaExpressionSyntax sles => sles.Body,
+                _ => null
+            };
+            if (body is null) return;
+
+            // Local processing stack: start with current group
+            var stack = new Stack<GroupDef>();
+            stack.Push(current);
+
+            void HandleCall(InvocationExpressionSyntax call)
+            {
+                if (call.Expression is not MemberAccessExpressionSyntax maes) return;
+                var methodName = maes.Name.Identifier.Text;
+                switch (methodName)
+                {
+                    case "WithOptions" when stack.Count > 0:
+                    {
+                        var args = call.ArgumentList.Arguments;
+                        if (args.Count > 0)
+                        {
+                            var cur = stack.Peek();
+                            ExtractAssignmentsFromLambda(semanticModel, args[0].Expression, cur.Props);
+                        }
+                        break;
+                    }
+                    case "DefineGroup":
+                    {
+                        var args = call.ArgumentList.Arguments;
+                        if (args.Count == 0) break;
+                        var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
+                        if (parsed.LogicalName is null) break;
+                        var parent = stack.Peek();
+                        var grp = parent.Children.FirstOrDefault(g => string.Equals(g.LogicalName, parsed.LogicalName, StringComparison.Ordinal))
+                                  ?? new GroupDef(parsed.LogicalName, null, null, new Dictionary<string, ConstValue>(StringComparer.Ordinal), new List<PermissionDef>(), new List<GroupDef>());
+                        if (!parent.Children.Contains(grp)) parent.Children.Add(grp);
+                        grp.DisplayName ??= parsed.DisplayName ?? parsed.LogicalName;
+                        grp.Description ??= parsed.Description;
+                        foreach (var kv in parsed.Props) grp.Props[kv.Key] = kv.Value;
+
+                        stack.Push(grp);
+
+                        var methodSymbol = semanticModel.GetSymbolInfo(call).Symbol as IMethodSymbol;
+                        if (methodSymbol is not null)
+                        {
+                            var builderLambda = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
+                            if (builderLambda is not null)
+                            {
+                                ProcessBuilderLambda(grp, builderLambda, semanticModel);
+                            }
+                        }
+                        break;
+                    }
+                    case "AddPermission" when stack.Count > 0:
+                    {
+                        var args = call.ArgumentList.Arguments;
+                        if (args.Count == 0) break;
+                        var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
+                        if (parsed.LogicalName is null) break;
+                        AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
+                        break;
+                    }
+                    case "Then":
+                    {
+                        if (stack.Count > 1) stack.Pop();
+                        break;
+                    }
+                }
+            }
+
+            switch (body)
+            {
+                case BlockSyntax block:
+                {
+                    foreach (var stmt in block.Statements.OfType<ExpressionStatementSyntax>())
+                    {
+                        if (stmt.Expression is InvocationExpressionSyntax inv)
+                        {
+                            var calls = FlattenCalls(inv);
+                            foreach (var c in calls)
+                            {
+                                HandleCall(c);
+                            }
+                        }
+                    }
+                    break;
+                }
+                case ExpressionSyntax exprBody:
+                {
+                    if (exprBody is InvocationExpressionSyntax inv)
+                    {
+                        var calls = FlattenCalls(inv);
+                        foreach (var c in calls)
+                        {
+                            HandleCall(c);
+                        }
+                    }
+                    break;
                 }
             }
         }
@@ -346,6 +495,19 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                 _ => expr.IsKind(SyntaxKind.NullLiteralExpression) ? new ConstValue(ConstKind.Null, null) : null
             };
         }
+    }
+
+    private static void AddOrUpdatePermission(GroupDef parent, string name, string? displayName, string? description, Dictionary<string, ConstValue> props)
+    {
+        var existing = parent.Permissions.FirstOrDefault(p => string.Equals(p.LogicalName, name, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            if (existing.DisplayName is null && displayName is not null) existing.DisplayName = displayName;
+            if (existing.Description is null && description is not null) existing.Description = description;
+            foreach (var kv in props) existing.Props[kv.Key] = kv.Value;
+            return;
+        }
+        parent.Permissions.Add(new PermissionDef(name, displayName, description, props));
     }
 
     private static class Diagnostics
