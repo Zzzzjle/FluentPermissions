@@ -38,11 +38,11 @@ public class GeneratorUsageTests
         Assert.NotNull(appPermissionsType);
 
     // 通过嵌套访问器获取组实例
-    var nestedG1 = appPermissionsType!.GetNestedType("G1");
+    var nestedG1 = appPermissionsType.GetNestedType("G1");
     Assert.NotNull(nestedG1);
-    var nestedGroupField = nestedG1!.GetField("Group");
+    var nestedGroupField = nestedG1.GetField("Group");
     Assert.NotNull(nestedGroupField);
-    var group = nestedGroupField!.GetValue(null)!;
+    var group = nestedGroupField.GetValue(null)!;
 
     // 反射类型: PermissionGroupInfo
         var groupType = group.GetType();
@@ -89,7 +89,7 @@ public class GeneratorUsageTests
         // 验证全局查找字典
         var groupsByKeyField = appPermissionsType.GetField("GroupsByKey");
         Assert.NotNull(groupsByKeyField);
-        var groupsDict = (System.Collections.IDictionary)groupsByKeyField!.GetValue(null)!;
+        var groupsDict = (System.Collections.IDictionary)groupsByKeyField.GetValue(null)!;
         Assert.True(groupsDict.Contains("G1"));
     }
 }

@@ -11,17 +11,17 @@ public class DeepRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermissi
         // Chain 1: A -> A1 -> A1a (permission X)
         builder
             .DefineGroup("A", "组A")
-                .DefineGroup("A1", "A1组")
-                    .DefineGroup("A1a", "A1a组")
-                        .AddPermission("X", "操作X")
-                    .Then()
-                .Then()
+            .DefineGroup("A1", "A1组")
+            .DefineGroup("A1a", "A1a组")
+            .AddPermission("X", "操作X")
+            .Then()
+            .Then()
             .Then();
 
         // Chain 2: B (permission Y)
         builder
             .DefineGroup("B", "组B")
-                .AddPermission("Y", "操作Y");
+            .AddPermission("Y", "操作Y");
     }
 }
 
