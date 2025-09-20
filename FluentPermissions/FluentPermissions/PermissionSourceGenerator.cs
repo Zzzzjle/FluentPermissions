@@ -432,7 +432,15 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         public string Name { get; } = name;
         private ITypeSymbol Type { get; } = type;
 
-        public string TypeName => Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        private static readonly SymbolDisplayFormat FullyQualifiedWithNullable = new SymbolDisplayFormat(
+            globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+            miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
+                                  SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+                                  SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+        public string TypeName => Type.ToDisplayString(FullyQualifiedWithNullable);
         public string DefaultLiteral => Type.IsReferenceType ? "null" : "default";
     }
 
