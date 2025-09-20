@@ -6,7 +6,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentPermissions.Sample", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentPermissions.Tests", "FluentPermissions\FluentPermissions.Tests\FluentPermissions.Tests.csproj", "{5FF9544B-A69E-443F-AB38-B22C070489AA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentPermissions.Core", "FluentPermissions.Core\FluentPermissions.Core.csproj", "{94832E47-0CC9-4D31-A503-CF6D0A290A82}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluentPermissions.Core", "FluentPermissions\FluentPermissions.Core\FluentPermissions.Core.csproj", "{E2330587-BD16-44C8-AAF0-96025BAA202E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,9 +26,9 @@ Global
 		{5FF9544B-A69E-443F-AB38-B22C070489AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5FF9544B-A69E-443F-AB38-B22C070489AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5FF9544B-A69E-443F-AB38-B22C070489AA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{94832E47-0CC9-4D31-A503-CF6D0A290A82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{94832E47-0CC9-4D31-A503-CF6D0A290A82}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{94832E47-0CC9-4D31-A503-CF6D0A290A82}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{94832E47-0CC9-4D31-A503-CF6D0A290A82}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2330587-BD16-44C8-AAF0-96025BAA202E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2330587-BD16-44C8-AAF0-96025BAA202E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2330587-BD16-44C8-AAF0-96025BAA202E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2330587-BD16-44C8-AAF0-96025BAA202E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
