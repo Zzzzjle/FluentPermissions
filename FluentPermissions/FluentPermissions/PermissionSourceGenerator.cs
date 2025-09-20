@@ -192,11 +192,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                             AddPermissionIfMissing(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
                             break;
                         }
-                        case "Then":
-                        {
-                            if (stack.Count > 0) stack.Pop();
-                            break;
-                        }
+                        // 'Then' style removed: no-op if seen in legacy code
                     }
                 }
             }
@@ -324,11 +320,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                         AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
                         break;
                     }
-                    case "Then":
-                    {
-                        if (stack.Count > 1) stack.Pop();
-                        break;
-                    }
+                    // 'Then' style removed: ignore if encountered in lambda body
                 }
             }
 

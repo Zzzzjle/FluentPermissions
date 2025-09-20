@@ -240,9 +240,4 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
         return this;
     }
 
-    /// <summary>
-    /// 结束当前组定义，回到父级（如果存在）；为了保持链式编译通过，这里返回同类型。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> Then()
-        => this;
 }

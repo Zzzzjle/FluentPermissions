@@ -9,19 +9,22 @@ public class DeepRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermissi
     public void Register(PermissionBuilder<TestGroupOptions, TestPermissionOptions> builder)
     {
         // Chain 1: A -> A1 -> A1a (permission X)
-        builder
-            .DefineGroup("A", "组A")
-            .DefineGroup("A1", "A1组")
-            .DefineGroup("A1a", "A1a组")
-            .AddPermission("X", "操作X")
-            .Then()
-            .Then()
-            .Then();
+        builder.DefineGroup("A", "组A", a =>
+        {
+            a.DefineGroup("A1", "A1组", a1 =>
+            {
+                a1.DefineGroup("A1a", "A1a组", a1a =>
+                {
+                    a1a.AddPermission("X", "操作X");
+                });
+            });
+        });
 
         // Chain 2: B (permission Y)
-        builder
-            .DefineGroup("B", "组B")
-            .AddPermission("Y", "操作Y");
+        builder.DefineGroup("B", "组B", b =>
+        {
+            b.AddPermission("Y", "操作Y");
+        });
     }
 }
 
