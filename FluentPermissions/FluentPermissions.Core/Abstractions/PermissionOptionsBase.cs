@@ -6,8 +6,4 @@ namespace FluentPermissions.Core.Abstractions;
 /// </summary>
 public abstract class PermissionOptionsBase
 {
-    /// <summary>
-    /// 描述信息。
-    /// </summary>
-    public string? Description { get; set; }
 }

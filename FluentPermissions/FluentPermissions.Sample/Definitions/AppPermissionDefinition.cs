@@ -7,41 +7,37 @@ public class AppPermissionDefinition : IPermissionRegistrar<SampleGroupOptions, 
 {
     public void Register(PermissionBuilder<SampleGroupOptions, SamplePermissionOptions> builder)
     {
+        // @formatter:off
         builder
-            .DefineGroup("System", o =>
+            .DefineGroup("System", "系统", "核心系统设置", o =>
             {
-                o.Description = "系统";
                 o.Icon = "fa-gear";
                 o.DisplayOrder = 10;
             })
-            .DefineGroup("Users", o =>
-            {
-                o.Description = "用户";
-                o.DisplayOrder = 1;
-            })
-            .AddPermission("Create", o => { o.Description = "创建用户"; })
-            .AddPermission("Delete", o =>
-            {
-                o.Description = "删除用户";
-                o.IsHighRisk = true;
-            })
+                .DefineGroup("Users", "用户账户管理", o =>
+                {
+                    o.DisplayOrder = 1;
+                })
+                    .AddPermission("Create", "创建用户")
+                    .AddPermission("Delete", "删除用户", "这是一个高风险操作", o =>
+                    {
+                        o.IsHighRisk = true;
+                    })
+                .Then()
+                .DefineGroup("Roles", "角色管理", o =>
+                {
+                    o.DisplayOrder = 2;
+                })
+                    .AddPermission("Create", "创建角色")
+                    .AddPermission("Assign", "分配角色")
+                .Then()
             .Then()
-            .DefineGroup("Roles", o =>
+            .DefineGroup("Reports", "报表中心", o =>
             {
-                o.Description = "角色";
-                o.DisplayOrder = 2;
-            })
-            .AddPermission("Create", o => { o.Description = "创建角色"; })
-            .AddPermission("Assign", o => { o.Description = "分配角色"; })
-            .Then()
-            .Then()
-            .DefineGroup("Reports", o =>
-            {
-                o.Description = "报表";
                 o.Icon = "fa-chart";
                 o.DisplayOrder = 20;
             })
-            .AddPermission("View", o => { o.Description = "查看报表"; })
-            .AddPermission("Export", o => { o.Description = "导出报表"; });
+                .AddPermission("View", "查看报表")
+                .AddPermission("Export", "导出报表");
     }
 }
