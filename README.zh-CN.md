@@ -6,8 +6,8 @@
 
 - Core 契约库：最小化的流式构建接口
 - 源码生成器：解析你的 Fluent 定义，生成
-  - 运行时模型（PermissionGroupInfo / PermissionItemInfo），包含选项属性、FullName 与稳定 Key（SHA-256）
-  - 强类型 `AppPermissions` 访问层，层级嵌套类、点分 Names 常量、全局扁平 Keys 常量映射
+  - 运行时模型（PermissionGroupInfo / PermissionItemInfo），包含选项属性、FullName 与稳定 Key（与点分路径一致，如 `System.Users.Create`）
+  - 强类型 `AppPermissions` 访问层：层级嵌套类 + 扁平 `Keys` 常量映射
 - Sample 控制台应用演示
 - xUnit 单元测试保障
 
@@ -19,7 +19,7 @@
   - 契约与 Fluent Builder 类型（运行时模型由生成器产生，不在 Core 内内置）
 - FluentPermissions（源码生成器，netstandard2.0）
   - 增量式生成器，扫描实现 `IPermissionRegistrar<TGroupOptions,TPermissionOptions>` 的类型
-  - 解析 `Register(builder)` 中的 Fluent 链：`DefineGroup(...).AddPermission(...).Then()`（支持无限嵌套）
+  - 解析 `Register(builder)` 中的“组内 builder-lambda 作用域”：`DefineGroup(..., builder => { builder.WithOptions(...); builder.DefineGroup(...); builder.AddPermission(...); })`（支持深度嵌套）
   - 在 `$(AssemblyName).Generated` 命名空间内生成模型与 `AppPermissions`
 - FluentPermissions.Sample（net9.0，可执行）
   - 定义层级权限并消费生成的 API
@@ -48,23 +48,39 @@ public sealed class SamplePermissionOptions : PermissionOptionsBase
 }
 ```
 
-3) 实现注册器
+3) 实现注册器（builder-lambda 风格）
 
 ```csharp
 public class AppPermissionDefinition : IPermissionRegistrar<SampleGroupOptions, SamplePermissionOptions>
 {
     public void Register(PermissionBuilder<SampleGroupOptions, SamplePermissionOptions> builder)
     {
-        builder
-            .DefineGroup("System", o => { o.Description = "系统"; o.DisplayOrder = 10; })
-                .DefineGroup("Users", o => { o.Description = "用户"; })
-                    .AddPermission("Create", o => o.Description = "创建用户")
-                    .AddPermission("Delete", o => { o.Description = "删除用户"; o.IsHighRisk = true; })
-                .Then()
-                .DefineGroup("Roles", o => o.Description = "角色")
-                    .AddPermission("Assign", o => o.Description = "分配角色")
-                .Then()
-            .Then();
+    builder
+      .DefineGroup("System", "系统", "核心系统设置", system =>
+      {
+        system.WithOptions(o =>
+        {
+          o.DisplayOrder = 10;
+          o.Icon = "fa-gear";
+        });
+
+        system.DefineGroup("Users", "用户账户管理", users =>
+        {
+          users.AddPermission("Create", "创建用户");
+          users.AddPermission("Delete", "删除用户", o => { o.IsHighRisk = true; });
+        });
+
+        system.DefineGroup("Roles", "角色管理", roles =>
+        {
+          roles.AddPermission("Assign", "分配角色");
+        });
+      })
+      .DefineGroup("Reports", reports =>
+      {
+        reports.WithOptions(o => { o.DisplayOrder = 20; o.Icon = "fa-chart"; });
+        reports.AddPermission("View", "查看报表");
+        reports.AddPermission("Export", "导出报表");
+      });
     }
 }
 ```
@@ -79,22 +95,22 @@ using YourAssemblyName.Generated;
 var system = AppPermissions.System.Group;              // PermissionGroupInfo
 var users  = AppPermissions.System.Users.Group;        // PermissionGroupInfo
 var create = AppPermissions.System.Users.Create;       // PermissionItemInfo
-var key    = AppPermissions.Keys.System_Users_Create;  // 点分路径的 SHA-256 十六进制
+var key    = AppPermissions.Keys.System_Users_Create;  // 点分路径字符串
 
 Console.WriteLine(create.FullName); // System_Users_Create
-Console.WriteLine(create.Key);      // cad9e2...
+Console.WriteLine(create.Key);      // System.Users.Create
 ```
 
-`PermissionItemInfo` 支持隐式转换为 string（Name），便于日志输出。
+`PermissionItemInfo` 支持隐式转换为 string（Key，点分路径），便于日志输出。
 
 ## 生成的模型
 
 - PermissionGroupInfo
-  - Name、FullName（下划线路径）、Key（点分路径 SHA-256）
+  - LogicalName、DisplayName、Description、FullName（下划线路径）、Key（点分路径字符串）、ParentKey
   - 从组选项类型收集的属性（包含继承的、Public settable）
   - Permissions（IReadOnlyList<PermissionItemInfo>）、Children（IReadOnlyList<PermissionGroupInfo>）
 - PermissionItemInfo
-  - Name、GroupName、FullName、Key、Group
+  - LogicalName、DisplayName、Description、FullName、Key、GroupKey
   - 从权限选项类型收集的属性
 
 ## 构建 / 测试 / 运行
@@ -114,9 +130,41 @@ Console.WriteLine(create.Key);      // cad9e2...
 
 ## 说明
 
-- Key 由点分全路径（如 `System.Users.Create`）稳定计算，跨构建保持一致
-- 通过重复 `DefineGroup(...)` 与 `Then()` 实现无限嵌套的层级结构
+- Key 与点分全路径一致（如 `System.Users.Create`），跨构建保持稳定
+- 通过 `DefineGroup(..., builder => { ... })` 在组内一次性定义结构与元数据，使用 `WithOptions(...)` 设置组级元数据
 - 若组名为 `System`，生成代码会使用 `global::System` 前缀避免命名冲突
+
+## 迁移（破坏性变更）
+
+从当前版本起，移除了旧的链式 `.Then()` 风格与所有“非 lambda”的 `DefineGroup` 重载，统一到 builder-lambda DSL：
+
+- 已移除：返回可链式的“非 lambda”`DefineGroup(...)`（靠 `.Then()` 回退层级）
+- 已新增：`DefineGroup(name, [display], [description], builder => { ... })`
+- 已新增：`group.WithOptions(Action<TGroupOptions>)` 专用于组级元数据；`AddPermission` 仍用于权限元数据
+
+迁移前（旧）：
+
+```csharp
+builder
+  .DefineGroup("System", o => { o.DisplayOrder = 10; })
+    .DefineGroup("Users")
+      .AddPermission("Create")
+    .Then()
+  .Then();
+```
+
+迁移后（新）：
+
+```csharp
+builder.DefineGroup("System", system =>
+{
+    system.WithOptions(o => o.DisplayOrder = 10);
+    system.DefineGroup("Users", users =>
+    {
+        users.AddPermission("Create");
+    });
+});
+```
 
 ## License
 

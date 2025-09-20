@@ -6,8 +6,8 @@ A compile-time, fluent, strongly-typed permission modeling toolkit for .NET.
 
 - Contracts library (Core) with a minimal fluent builder interface
 - Roslyn source generator that parses your fluent definitions and emits:
-  - Rich runtime models (PermissionGroupInfo, PermissionItemInfo) with option properties, FullName, and a stable Key (SHA-256)
-  - A strongly-typed `AppPermissions` access API with hierarchical nested classes, dotted Names constants, and a flat Keys map
+  - Rich runtime models (PermissionGroupInfo, PermissionItemInfo) with option properties, FullName, and a stable Key (dotted path like `System.Users.Create`)
+  - A strongly-typed `AppPermissions` access API with hierarchical nested classes and a flat `Keys` map
 - Sample console app demonstrating usage
 - xUnit tests for property mapping and navigation
 
@@ -19,7 +19,7 @@ Projects in this repository:
   - Contracts and fluent builder types (no runtime model classes shipped at runtime; models are generated)
 - FluentPermissions (Source Generator, netstandard2.0)
   - Roslyn incremental generator that scans implementations of `IPermissionRegistrar<TGroupOptions,TPermissionOptions>`
-  - Parses `Register(builder)` fluent chains: `DefineGroup(...).AddPermission(...).Then()` (supports nested groups)
+  - Parses `Register(builder)` builder-lambda group scopes: `DefineGroup(..., builder => { builder.WithOptions(...); builder.DefineGroup(...); builder.AddPermission(...); })` (supports deeply nested groups)
   - Generates models and `AppPermissions` under `$(AssemblyName).Generated`
 - FluentPermissions.Sample (net9.0, Exe)
   - Demonstrates defining hierarchical groups and consuming generated APIs
@@ -48,23 +48,39 @@ public sealed class SamplePermissionOptions : PermissionOptionsBase
 }
 ```
 
-3) Implement a registrar
+3) Implement a registrar (builder-lambda style)
 
 ```csharp
 public class AppPermissionDefinition : IPermissionRegistrar<SampleGroupOptions, SamplePermissionOptions>
 {
     public void Register(PermissionBuilder<SampleGroupOptions, SamplePermissionOptions> builder)
     {
-        builder
-            .DefineGroup("System", o => { o.Description = "System"; o.DisplayOrder = 10; })
-                .DefineGroup("Users", o => { o.Description = "Users"; })
-                    .AddPermission("Create", o => o.Description = "Create user")
-                    .AddPermission("Delete", o => { o.Description = "Delete user"; o.IsHighRisk = true; })
-                .Then()
-                .DefineGroup("Roles", o => o.Description = "Roles")
-                    .AddPermission("Assign", o => o.Description = "Assign role")
-                .Then()
-            .Then();
+    builder
+      .DefineGroup("System", "System", "Core system settings", system =>
+      {
+        system.WithOptions(o =>
+        {
+          o.DisplayOrder = 10;
+          o.Icon = "fa-gear";
+        });
+
+        system.DefineGroup("Users", "User Management", users =>
+        {
+          users.AddPermission("Create", "Create user");
+          users.AddPermission("Delete", "Delete user", o => { o.IsHighRisk = true; });
+        });
+
+        system.DefineGroup("Roles", "Role Management", roles =>
+        {
+          roles.AddPermission("Assign", "Assign role");
+        });
+      })
+      .DefineGroup("Reports", reports =>
+      {
+        reports.WithOptions(o => { o.DisplayOrder = 20; o.Icon = "fa-chart"; });
+        reports.AddPermission("View", "View reports");
+        reports.AddPermission("Export", "Export reports");
+      });
     }
 }
 ```
@@ -79,22 +95,22 @@ using YourAssemblyName.Generated;
 var system = AppPermissions.System.Group;                // PermissionGroupInfo
 var users  = AppPermissions.System.Users.Group;          // PermissionGroupInfo
 var create = AppPermissions.System.Users.Create;         // PermissionItemInfo
-var key    = AppPermissions.Keys.System_Users_Create;    // SHA-256 hex of dotted path
+var key    = AppPermissions.Keys.System_Users_Create;    // Dotted path string
 
 Console.WriteLine(create.FullName); // System_Users_Create
-Console.WriteLine(create.Key);      // cad9e2...
+Console.WriteLine(create.Key);      // System.Users.Create
 ```
 
-The `PermissionItemInfo` has an implicit `string` conversion returning `Name` for convenient logging.
+The `PermissionItemInfo` has an implicit `string` conversion returning `Key` (the dotted path) for convenient logging.
 
 ## Generated models
 
 - PermissionGroupInfo
-  - Name, FullName (underscored path), Key (SHA-256 of dotted path)
+  - LogicalName, DisplayName, Description, FullName (underscored path), Key (dotted path string), ParentKey
   - Option properties from your group options (including inherited settable public properties)
   - Permissions (IReadOnlyList<PermissionItemInfo>), Children (IReadOnlyList<PermissionGroupInfo>)
 - PermissionItemInfo
-  - Name, GroupName, FullName, Key, Group
+  - LogicalName, DisplayName, Description, FullName, Key, GroupKey
   - Option properties from your permission options
 
 ## Build, test, run
@@ -114,9 +130,41 @@ The generator can optionally emit generated files to `obj/generated/...` when th
 
 ## Notes
 
-- Keys are stable across builds and derived from the dotted full path (e.g., `System.Users.Create`)
-- Nested groups are supported via repeated `DefineGroup(...)` and unwinding with `Then()`
+- Keys are stable across builds and equal to the dotted full path (e.g., `System.Users.Create`)
+- Nested groups are defined inside the `DefineGroup(..., builder => { ... })` scope. Use `WithOptions(...)` to set group metadata.
 - If your group name conflicts with `System`, we use fully-qualified `global::System` in generated code to avoid ambiguity
+
+## Migration (breaking changes)
+
+Starting from v1, the legacy chaining style and `.Then()` were removed in favor of a single, clearer DSL:
+
+- Removed: non-lambda `DefineGroup(...)` overloads that returned a builder to be unwound with `.Then()`
+- Added: builder-lambda overloads `DefineGroup(name, [display], [description], builder => { ... })`
+- Added: `group.WithOptions(Action<TGroupOptions>)` for group metadata; keep `AddPermission` overloads for permission metadata
+
+Before (legacy):
+
+```csharp
+builder
+  .DefineGroup("System", o => { o.DisplayOrder = 10; })
+    .DefineGroup("Users")
+      .AddPermission("Create")
+    .Then()
+  .Then();
+```
+
+After (current):
+
+```csharp
+builder.DefineGroup("System", system =>
+{
+    system.WithOptions(o => o.DisplayOrder = 10);
+    system.DefineGroup("Users", users =>
+    {
+        users.AddPermission("Create");
+    });
+});
+```
 
 ## License
 

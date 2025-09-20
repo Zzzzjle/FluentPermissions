@@ -19,10 +19,12 @@ public class TestRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermissi
 {
     public void Register(PermissionBuilder<TestGroupOptions, TestPermissionOptions> builder)
     {
-        builder
-            .DefineGroup("G1", "Group One", "Group1 Desc", o => { o.Order = 7; })
-                .AddPermission("P1", "Perm1")
-                .AddPermission("P2", "Perm2", null, o => { o.Critical = true; });
+        builder.DefineGroup("G1", "Group One", "Group1 Desc", g1 =>
+        {
+            g1.WithOptions(o => { o.Order = 7; });
+            g1.AddPermission("P1", "Perm1");
+            g1.AddPermission("P2", "Perm2", null, o => { o.Critical = true; });
+        });
     }
 }
 

@@ -12,47 +12,6 @@ public sealed class PermissionBuilder<TGroupOptions, TPermissionOptions>
     where TGroupOptions : PermissionOptionsBase, new()
     where TPermissionOptions : PermissionOptionsBase, new()
 {
-    /// <summary>
-    /// 定义顶层权限组（最简形式）。DisplayName 将回退为 logicalName。
-    /// </summary>
-    // 1) 最简洁 (DisplayName 回退为 logicalName)
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 定义顶层权限组并指定显示名。
-    /// </summary>
-    // 2) 提供显示名
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 定义顶层权限组并指定显示名和描述。
-    /// </summary>
-    // 3) 提供显示名和描述
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName, string? description)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 定义顶层权限组，仅配置扩展属性。
-    /// </summary>
-    // 4) 只配置扩展属性
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, Action<TGroupOptions> configure)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 定义顶层权限组，指定显示名并配置扩展属性。
-    /// </summary>
-    // 5) 提供显示名并配置扩展属性
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName, Action<TGroupOptions> configure)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 定义顶层权限组，最完整重载。
-    /// </summary>
-    // 6) 最完整重载
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName, string? description, Action<TGroupOptions> configure)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
 
     /// <summary>
     /// 定义顶层权限组，并在提供的 <paramref name="configureGroup"/> lambda 作用域内完成组内结构与元数据配置。
@@ -106,7 +65,11 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
     /// 当前组的逻辑名称。
     /// </summary>
     public string GroupName { get; }
-    internal PermissionGroupBuilder(string groupName) { GroupName = groupName; }
+
+    internal PermissionGroupBuilder(string groupName)
+    {
+        GroupName = groupName;
+    }
 
     /// <summary>
     /// 配置当前权限组的元数据（扩展属性）。
@@ -117,12 +80,9 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
     public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> WithOptions(Action<TGroupOptions> configureOptions)
     {
         // 运行时无需保存任何状态；源生成器会从 lambda 中提取常量赋值。
-        if (configureOptions is not null)
-        {
-            var options = new TGroupOptions();
-            configureOptions(options);
-            // 不做持久化，保持无副作用。
-        }
+        var options = new TGroupOptions();
+        configureOptions(options);
+        // 不做持久化，保持无副作用。
         return this;
     }
 
@@ -136,69 +96,39 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
     /// <summary>
     /// 定义权限项并指定显示名。
     /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName, string displayName)
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
+        string displayName)
         => this;
 
     /// <summary>
     /// 定义权限项并指定显示名与描述。
     /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName, string displayName, string? description)
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
+        string displayName, string? description)
         => this;
 
     /// <summary>
     /// 定义权限项，仅配置扩展属性。
     /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName, Action<TPermissionOptions> configure)
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
+        Action<TPermissionOptions> configure)
         => this;
 
     /// <summary>
     /// 定义权限项，指定显示名并配置扩展属性。
     /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName, string displayName, Action<TPermissionOptions> configure)
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
+        string displayName, Action<TPermissionOptions> configure)
         => this;
 
     /// <summary>
     /// 定义权限项，最完整重载。
     /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName, string displayName, string? description, Action<TPermissionOptions> configure)
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
+        string displayName, string? description, Action<TPermissionOptions> configure)
         => this;
 
-    // 允许在当前组下继续定义子组
-    /// <summary>
-    /// 在当前组下定义子组（最简）。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 在当前组下定义子组并指定显示名。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 在当前组下定义子组并指定显示名和描述。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName, string? description)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 在当前组下定义子组，仅配置扩展属性。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, Action<TGroupOptions> configure)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 在当前组下定义子组，指定显示名并配置扩展属性。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName, Action<TGroupOptions> configure)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
-
-    /// <summary>
-    /// 在当前组下定义子组，最完整重载。
-    /// </summary>
-    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(string logicalName, string displayName, string? description, Action<TGroupOptions> configure)
-        => new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
+    // 旧的链式子组 DefineGroup 风格已移除，保留仅支持 builder-lambda 的重载。
 
     /// <summary>
     /// 在当前组下定义子组，并在提供的 <paramref name="configureGroup"/> lambda 内完成该子组的结构与元数据配置。
@@ -239,5 +169,4 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
         configureGroup(child);
         return this;
     }
-
 }
