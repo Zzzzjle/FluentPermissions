@@ -34,13 +34,13 @@ public static class Program
         Console.WriteLine($"Create.GroupKey -> {create.GroupKey}");
         var parentGroup = AppPermissions.GroupsByKey[create.GroupKey];
         Console.WriteLine($"Parent Group from GroupsByKey: {parentGroup.DisplayName}");
-        Console.WriteLine($"System.Children.Count: {system.Children.Count}");
+        Console.WriteLine($"System.SubGroups.Count: {system.SubGroups.Count}");
         Console.WriteLine($"Users.Permissions.Count: {users.Permissions.Count}");
 
         Console.WriteLine("All root groups:");
         foreach (var g in AppPermissions.GetAllGroups())
         {
-            Console.WriteLine($"- {g.FullName} ({g.Permissions.Count} perms, {g.Children.Count} children)");
+            Console.WriteLine($"- {g.FullName} ({g.Permissions.Count} perms, {g.SubGroups.Count} children)");
         }
     }
 }

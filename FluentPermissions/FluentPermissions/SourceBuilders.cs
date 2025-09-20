@@ -15,7 +15,7 @@ internal static class SourceBuilders
         sb.AppendLine("#nullable enable");
         sb.AppendLine($"namespace {ns}.Generated;");
         sb.AppendLine();
-    sb.AppendLine("internal static class PermissionModels");
+        sb.AppendLine("internal static class PermissionModels");
         sb.AppendLine("{");
         // Group model
         sb.AppendLine("    internal sealed class PermissionGroupInfo");
@@ -38,8 +38,11 @@ internal static class SourceBuilders
             };
             sb.AppendLine($"        public {type} {prop.Name} {{ get; }}");
         }
-        sb.AppendLine("        public global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> Children { get; }");
-        sb.AppendLine("        public global::System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; }");
+
+        sb.AppendLine(
+            "        public global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> SubGroups { get; }");
+        sb.AppendLine(
+            "        public global::System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; }");
         sb.AppendLine("        public string FullName => Key.Replace('.', '_');");
         sb.AppendLine(
             "        public PermissionGroupInfo(string key, string logicalName, string? displayName, string? description,");
@@ -57,15 +60,18 @@ internal static class SourceBuilders
             };
             sb.AppendLine($"            {type} {prop.Name.ToLowerInvariant()},");
         }
-        sb.AppendLine("            global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> children,");
+
+        sb.AppendLine("            global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> subGroups,");
         sb.AppendLine("            global::System.Collections.Generic.IReadOnlyList<PermissionItemInfo> permissions)");
         sb.AppendLine("        {");
-        sb.AppendLine("            Key = key; ParentKey = parentKey; LogicalName = logicalName; DisplayName = displayName; Description = description;");
+        sb.AppendLine(
+            "            Key = key; ParentKey = parentKey; LogicalName = logicalName; DisplayName = displayName; Description = description;");
         foreach (var prop in model.GroupOptionProps)
         {
             sb.AppendLine($"            {prop.Name} = {prop.Name.ToLowerInvariant()};");
         }
-        sb.AppendLine("            Children = children; Permissions = permissions;");
+
+        sb.AppendLine("            SubGroups = subGroups; Permissions = permissions;");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -89,6 +95,7 @@ internal static class SourceBuilders
             };
             sb.AppendLine($"        public {type} {prop.Name} {{ get; }}");
         }
+
         sb.AppendLine("        public string GroupKey { get; }");
         sb.AppendLine("        public string FullName => GroupKey.Replace('.', '_') + \"_\" + LogicalName;");
         sb.AppendLine(
@@ -106,13 +113,16 @@ internal static class SourceBuilders
             };
             sb.AppendLine($"            {type} {prop.Name.ToLowerInvariant()},");
         }
+
         sb.AppendLine("            string groupKey)");
         sb.AppendLine("        {");
-        sb.AppendLine("            Key = key; LogicalName = logicalName; DisplayName = displayName; Description = description; GroupKey = groupKey;");
+        sb.AppendLine(
+            "            Key = key; LogicalName = logicalName; DisplayName = displayName; Description = description; GroupKey = groupKey;");
         foreach (var prop in model.PermOptionProps)
         {
             sb.AppendLine($"            {prop.Name} = {prop.Name.ToLowerInvariant()};");
         }
+
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -130,7 +140,8 @@ internal static class SourceBuilders
         sb.AppendLine();
         sb.AppendLine("internal static class AppPermissions");
         sb.AppendLine("{");
-        sb.AppendLine("    private static readonly global::System.Collections.Generic.IReadOnlyList<PermissionModels.PermissionGroupInfo> _all;");
+        sb.AppendLine(
+            "    private static readonly global::System.Collections.Generic.IReadOnlyList<PermissionModels.PermissionGroupInfo> _all;");
         sb.AppendLine("    static AppPermissions()");
         sb.AppendLine("    {");
         var rootVars = new List<string>();
@@ -139,19 +150,17 @@ internal static class SourceBuilders
             var v = EmitCtorGroup(sb, g, null, 8);
             rootVars.Add(v);
         }
-        if (rootVars.Count == 0)
-        {
-            sb.AppendLine("        _all = global::System.Array.Empty<PermissionModels.PermissionGroupInfo>();");
-        }
-        else
-        {
-            sb.AppendLine($"        _all = new PermissionModels.PermissionGroupInfo[] {{ {string.Join(", ", rootVars)} }};");
-        }
+
+        sb.AppendLine(rootVars.Count == 0
+            ? "        _all = global::System.Array.Empty<PermissionModels.PermissionGroupInfo>();"
+            : $"        _all = new PermissionModels.PermissionGroupInfo[] {{ {string.Join(", ", rootVars)} }};");
+
         sb.AppendLine("        GroupsByKey = BuildGroupsByKey();");
         sb.AppendLine("        PermsByKey = BuildPermsByKey();");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    public static global::System.Collections.Generic.IReadOnlyList<PermissionModels.PermissionGroupInfo> GetAllGroups()");
+        sb.AppendLine(
+            "    public static global::System.Collections.Generic.IReadOnlyList<PermissionModels.PermissionGroupInfo> GetAllGroups()");
         sb.AppendLine("    {");
         sb.AppendLine("        return _all;");
         sb.AppendLine("    }");
@@ -167,12 +176,13 @@ internal static class SourceBuilders
         sb.AppendLine(
             "        var dict = new global::System.Collections.Generic.Dictionary<string, PermissionModels.PermissionGroupInfo>(global::System.StringComparer.Ordinal);");
         sb.AppendLine("        foreach (var r in GetAllGroups()) AddGroup(r);");
-        sb.AppendLine("        return new global::System.Collections.ObjectModel.ReadOnlyDictionary<string, PermissionModels.PermissionGroupInfo>(dict);");
+        sb.AppendLine(
+            "        return new global::System.Collections.ObjectModel.ReadOnlyDictionary<string, PermissionModels.PermissionGroupInfo>(dict);");
         sb.AppendLine();
         sb.AppendLine("        void AddGroup(PermissionModels.PermissionGroupInfo g)");
         sb.AppendLine("        {");
         sb.AppendLine("            dict[g.Key] = g;");
-        sb.AppendLine("            foreach (var c in g.Children) AddGroup(c);");
+        sb.AppendLine("            foreach (var c in g.SubGroups) AddGroup(c);");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -182,12 +192,13 @@ internal static class SourceBuilders
         sb.AppendLine(
             "        var dict = new global::System.Collections.Generic.Dictionary<string, PermissionModels.PermissionItemInfo>(global::System.StringComparer.Ordinal);");
         sb.AppendLine("        foreach (var r in GetAllGroups()) AddPerms(r);");
-        sb.AppendLine("        return new global::System.Collections.ObjectModel.ReadOnlyDictionary<string, PermissionModels.PermissionItemInfo>(dict);");
+        sb.AppendLine(
+            "        return new global::System.Collections.ObjectModel.ReadOnlyDictionary<string, PermissionModels.PermissionItemInfo>(dict);");
         sb.AppendLine();
         sb.AppendLine("        void AddPerms(PermissionModels.PermissionGroupInfo g)");
         sb.AppendLine("        {");
         sb.AppendLine("            foreach (var p in g.Permissions) dict[p.Key] = p;");
-        sb.AppendLine("            foreach (var c in g.Children) AddPerms(c);");
+        sb.AppendLine("            foreach (var c in g.SubGroups) AddPerms(c);");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -221,18 +232,22 @@ internal static class SourceBuilders
                 var cv = EmitCtorGroup(esb, c, key, indent);
                 childVarNames.Add(cv);
             }
+
             // build children array
             var childrenVar = SafeIdent("children_" + key);
             if (childVarNames.Count == 0)
-                esb.AppendLine(pad + $"var {childrenVar} = global::System.Array.Empty<PermissionModels.PermissionGroupInfo>();");
+                esb.AppendLine(pad +
+                               $"var {childrenVar} = global::System.Array.Empty<PermissionModels.PermissionGroupInfo>();");
             else
-                esb.AppendLine(pad + $"var {childrenVar} = new PermissionModels.PermissionGroupInfo[] {{ {string.Join(", ", childVarNames)} }};");
+                esb.AppendLine(pad +
+                               $"var {childrenVar} = new PermissionModels.PermissionGroupInfo[] {{ {string.Join(", ", childVarNames)} }};");
 
             // build permissions array
             var permsVar = SafeIdent("perms_" + key);
             if (g.Permissions.Count == 0)
             {
-                esb.AppendLine(pad + $"var {permsVar} = global::System.Array.Empty<PermissionModels.PermissionItemInfo>();");
+                esb.AppendLine(pad +
+                               $"var {permsVar} = global::System.Array.Empty<PermissionModels.PermissionItemInfo>();");
             }
             else
             {
@@ -243,30 +258,40 @@ internal static class SourceBuilders
                     if (!first) permItems.Append(", ");
                     first = false;
                     var pArgs = new StringBuilder();
-                    pArgs.Append($"\"{key}.{p.LogicalName}\", \"{p.LogicalName}\", {ToNullableLiteral(p.DisplayName)}, {ToNullableLiteral(p.Description)}");
+                    pArgs.Append(
+                        $"\"{key}.{p.LogicalName}\", \"{p.LogicalName}\", {ToNullableLiteral(p.DisplayName)}, {ToNullableLiteral(p.Description)}");
                     foreach (var prop in model.PermOptionProps)
                     {
                         var has = p.Props.TryGetValue(prop.Name, out var val);
-                        var lit = has ? val.ToEmitLiteral() : (prop.Kind == ConstKind.String ? "null" : prop.Kind == ConstKind.Bool ? "false" : "0");
+                        var lit = has
+                            ? val!.ToEmitLiteral()
+                            : prop.Kind == ConstKind.String ? "null" : prop.Kind == ConstKind.Bool ? "false" : "0";
                         pArgs.Append(", ").Append(lit);
                     }
+
                     pArgs.Append(", \"" + key + "\"");
                     permItems.Append($"new PermissionModels.PermissionItemInfo({pArgs})");
                 }
+
                 esb.AppendLine(pad + $"var {permsVar} = new PermissionModels.PermissionItemInfo[] {{ {permItems} }};");
             }
 
             // emit group with typed options and readonly children/perms
             var gArgs = new StringBuilder();
-            gArgs.Append($"\"{key}\", \"{g.LogicalName}\", {ToNullableLiteral(g.DisplayName)}, {ToNullableLiteral(g.Description)}, {(parentKey is null ? "null" : "\"" + parentKey + "\"")}");
+            gArgs.Append(
+                $"\"{key}\", \"{g.LogicalName}\", {ToNullableLiteral(g.DisplayName)}, {ToNullableLiteral(g.Description)}, {(parentKey is null ? "null" : "\"" + parentKey + "\"")}");
             foreach (var prop in model.GroupOptionProps)
             {
                 var has = g.Props.TryGetValue(prop.Name, out var val);
-                var lit = has ? val.ToEmitLiteral() : (prop.Kind == ConstKind.String ? "null" : prop.Kind == ConstKind.Bool ? "false" : "0");
+                var lit = has
+                    ? val!.ToEmitLiteral()
+                    : prop.Kind == ConstKind.String ? "null" : prop.Kind == ConstKind.Bool ? "false" : "0";
                 gArgs.Append(", ").Append(lit);
             }
+
             var groupVar = SafeIdent("group_" + key);
-            esb.AppendLine(pad + $"var {groupVar} = new PermissionModels.PermissionGroupInfo({gArgs}, {childrenVar}, {permsVar});");
+            esb.AppendLine(pad +
+                           $"var {groupVar} = new PermissionModels.PermissionGroupInfo({gArgs}, {childrenVar}, {permsVar});");
             return groupVar;
         }
 

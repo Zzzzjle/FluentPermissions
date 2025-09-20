@@ -5,8 +5,16 @@ using Xunit;
 
 namespace FluentPermissions.Tests;
 
-public class SGroupOptions : PermissionOptionsBase { public int DisplayOrder { get; set; } public string? Icon { get; set; } }
-public class SPermOptions : PermissionOptionsBase { public bool IsHighRisk { get; set; } }
+public class SGroupOptions : PermissionOptionsBase
+{
+    public int DisplayOrder { get; set; }
+    public string? Icon { get; set; }
+}
+
+public class SPermOptions : PermissionOptionsBase
+{
+    public bool IsHighRisk { get; set; }
+}
 
 // Reuse the same generic args as existing tests: TestGroupOptions/TestPermissionOptions
 public class AppReg2 : IPermissionRegistrar<TestGroupOptions, TestPermissionOptions>
@@ -16,10 +24,7 @@ public class AppReg2 : IPermissionRegistrar<TestGroupOptions, TestPermissionOpti
         builder
             .DefineGroup("System", "系统", "核心系统设置", system =>
             {
-                system.WithOptions(options =>
-                {
-                    options.Order = 10;
-                });
+                system.WithOptions(options => { options.Order = 10; });
 
                 system.DefineGroup("Users", "用户账户管理", users =>
                 {
@@ -35,10 +40,7 @@ public class AppReg2 : IPermissionRegistrar<TestGroupOptions, TestPermissionOpti
             })
             .DefineGroup("Reports", reports =>
             {
-                reports.WithOptions(options =>
-                {
-                    options.Order = 20;
-                });
+                reports.WithOptions(options => { options.Order = 20; });
                 reports.AddPermission("View", "查看报表");
                 reports.AddPermission("Export", "导出报表");
             });
@@ -55,7 +57,7 @@ public class ShapeFromNestedGroupsTests
         var appPermissionsType = asm.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 
-    // Root groups should include: System, Reports (other tests may add more roots)
+        // Root groups should include: System, Reports (other tests may add more roots)
         var getAll = appPermissionsType!.GetMethod("GetAllGroups");
         Assert.NotNull(getAll);
         var roots = ((System.Collections.IEnumerable)getAll!.Invoke(null, null)!).Cast<object>().ToList();
@@ -66,30 +68,31 @@ public class ShapeFromNestedGroupsTests
         Assert.DoesNotContain("Roles", rootNames);
 
         // System children must be Users and Roles (two children)
-    var groupsByKeyField = appPermissionsType.GetField("GroupsByKey")!;
-    var groupsByKeyObj = groupsByKeyField.GetValue(null)!;
-    var gbkType = groupsByKeyField.FieldType;
-    Assert.True(gbkType.IsGenericType);
-    Assert.Equal("IReadOnlyDictionary`2", gbkType.GetGenericTypeDefinition().Name);
+        var groupsByKeyField = appPermissionsType.GetField("GroupsByKey")!;
+        var groupsByKeyObj = groupsByKeyField.GetValue(null)!;
+        var gbkType = groupsByKeyField.FieldType;
+        Assert.True(gbkType.IsGenericType);
+        Assert.Equal("IReadOnlyDictionary`2", gbkType.GetGenericTypeDefinition().Name);
 
-    // Same for PermsByKey
-    var permsByKeyField = appPermissionsType.GetField("PermsByKey")!;
-    var pbkType = permsByKeyField.FieldType;
-    Assert.True(pbkType.IsGenericType);
-    Assert.Equal("IReadOnlyDictionary`2", pbkType.GetGenericTypeDefinition().Name);
+        // Same for PermsByKey
+        var permsByKeyField = appPermissionsType.GetField("PermsByKey")!;
+        var pbkType = permsByKeyField.FieldType;
+        Assert.True(pbkType.IsGenericType);
+        Assert.Equal("IReadOnlyDictionary`2", pbkType.GetGenericTypeDefinition().Name);
 
-    // Access System group
-    var groupsByKey = (System.Collections.IDictionary)groupsByKeyObj;
-    var system = groupsByKey["System"]!;
-        var children = ((System.Collections.IEnumerable)system.GetType().GetProperty("Children")!.GetValue(system)!).Cast<object>().ToList();
-    // Children is IReadOnlyList
-    var childrenPropType = system.GetType().GetProperty("Children")!.PropertyType;
-    Assert.True(childrenPropType.IsGenericType);
-    Assert.Equal("IReadOnlyList`1", childrenPropType.GetGenericTypeDefinition().Name);
-    // Permissions is IReadOnlyList
-    var permsPropType = system.GetType().GetProperty("Permissions")!.PropertyType;
-    Assert.True(permsPropType.IsGenericType);
-    Assert.Equal("IReadOnlyList`1", permsPropType.GetGenericTypeDefinition().Name);
+        // Access System group
+        var groupsByKey = (System.Collections.IDictionary)groupsByKeyObj;
+        var system = groupsByKey["System"]!;
+        var children = ((System.Collections.IEnumerable)system.GetType().GetProperty("SubGroups")!.GetValue(system)!)
+            .Cast<object>().ToList();
+        // SubGroups is IReadOnlyList
+        var childrenPropType = system.GetType().GetProperty("SubGroups")!.PropertyType;
+        Assert.True(childrenPropType.IsGenericType);
+        Assert.Equal("IReadOnlyList`1", childrenPropType.GetGenericTypeDefinition().Name);
+        // Permissions is IReadOnlyList
+        var permsPropType = system.GetType().GetProperty("Permissions")!.PropertyType;
+        Assert.True(permsPropType.IsGenericType);
+        Assert.Equal("IReadOnlyList`1", permsPropType.GetGenericTypeDefinition().Name);
         var childNames = children.Select(c => (string)c.GetType().GetProperty("LogicalName")!.GetValue(c)!).ToList();
         Assert.Equal(2, children.Count);
         Assert.Contains("Users", childNames);

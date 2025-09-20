@@ -12,7 +12,11 @@ public class SalesRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermiss
     {
         builder.DefineGroup("Sales", "销售", s =>
         {
-            s.WithOptions(o => { o.Order = 100; o.Icon = "fa-dollar"; });
+            s.WithOptions(o =>
+            {
+                o.Order = 100;
+                o.Icon = "fa-dollar";
+            });
             s.AddPermission("View", "查看");
         });
     }
@@ -63,7 +67,7 @@ public class MultiRegistrarConsistencyTests
 
         // Verify HR and its permission
         var hr = groupsDict["HR"]!;
-        var childrenProp = hr.GetType().GetProperty("Children")!;
+        var childrenProp = hr.GetType().GetProperty("SubGroups")!;
         Assert.Equal("IReadOnlyList`1", childrenProp.PropertyType.GetGenericTypeDefinition().Name);
         var permsProp = hr.GetType().GetProperty("Permissions")!;
         Assert.Equal("IReadOnlyList`1", permsProp.PropertyType.GetGenericTypeDefinition().Name);
