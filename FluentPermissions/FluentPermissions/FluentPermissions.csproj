@@ -2,7 +2,8 @@
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
-        <IsPackable>false</IsPackable>
+        <IsPackable>true</IsPackable>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
 
@@ -11,6 +12,14 @@
 
         <RootNamespace>FluentPermissions</RootNamespace>
         <PackageId>FluentPermissions</PackageId>
+
+        <!-- Package metadata -->
+        <RepositoryUrl>https://github.com/Zzzzjle/FluentPermissions</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <Description>Fluent permission source generator and analyzers for .NET.</Description>
+        <PackageTags>analyzers;source-generator;roslyn;permissions;authorization</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <Authors>Zzzzjle</Authors>
     </PropertyGroup>
 
     <ItemGroup>
@@ -18,13 +27,24 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.0"/>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.3.0"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.0">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.3.0">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj" />
+        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj" />
     </ItemGroup>
 
+    <!-- Package the analyzer artifacts into analyzers/dotnet/cs -->
+    <ItemGroup>
+        <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" />
+        <None Include="$(TargetDir)$(AssemblyName).xml" Pack="true" PackagePath="analyzers/dotnet/cs" Condition="Exists('$(TargetDir)$(AssemblyName).xml')" />
+        <!-- Bring the root README into the package -->
+        <None Include="..\..\README.md" Pack="true" PackagePath="/" Link="README.md" Condition="Exists('..\..\README.md')" />
+    </ItemGroup>
 
 </Project>
