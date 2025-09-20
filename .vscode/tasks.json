@@ -1,0 +1,56 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-sln",
+			"type": "shell",
+			"command": "dotnet build FluentPermissions.sln -v minimal",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "rebuild-sln",
+			"type": "shell",
+			"command": "dotnet build FluentPermissions.sln -v minimal",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "rebuild-sln-2",
+			"type": "shell",
+			"command": "dotnet build FluentPermissions.sln -v minimal",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "rebuild-sln-3",
+			"type": "shell",
+			"command": "dotnet build FluentPermissions.sln -v minimal",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "rebuild-sln-4",
+			"type": "shell",
+			"command": "dotnet build FluentPermissions.sln -v minimal",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "run-sample",
+			"type": "shell",
+			"command": "dotnet run --project FluentPermissions/FluentPermissions.Sample/FluentPermissions.Sample.csproj -c Debug",
+			"group": "build"
+		}
+	]
+}

@@ -29,6 +29,15 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
         return this;
     }
 
-    public PermissionBuilder<TGroupOptions, TPermissionOptions> Then()
-        => new PermissionBuilder<TGroupOptions, TPermissionOptions>();
+    // 允许在当前组下继续定义子组
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(
+        string name, Action<TGroupOptions>? configure = null)
+    {
+        // 这里只做契约；源生成器会读取调用图。
+        return new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(name);
+    }
+
+    // 结束当前组定义，回到父级（如果存在）；为了保持链式编译通过，这里返回同类型。
+    public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> Then()
+        => this;
 }

@@ -4,6 +4,9 @@
         <TargetFramework>net9.0</TargetFramework>
         <Nullable>enable</Nullable>
         <RootNamespace>FluentPermissions.Sample</RootNamespace>
+            <OutputType>Exe</OutputType>
+          <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+          <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\generated</CompilerGeneratedFilesOutputPath>
     </PropertyGroup>
 
     <ItemGroup>

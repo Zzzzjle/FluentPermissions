@@ -62,12 +62,9 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
     private sealed class Analyzer
     {
         private readonly Compilation _compilation;
-        private readonly INamedTypeSymbol? _permissionBuilderSymbol;
-
         public Analyzer(Compilation compilation)
         {
             _compilation = compilation;
-            _permissionBuilderSymbol = compilation.GetTypeByMetadataName("FluentPermissions.Core.Builder.PermissionBuilder`2");
         }
 
         public Model Analyze(ImmutableArray<RegistrarInfo> registrars)
@@ -108,7 +105,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                 {
                     if (decl.GetSyntax() is MethodDeclarationSyntax mds)
                     {
-                        var groups = ParseRegisterBody(mds, registerMethod);
+                        var groups = ParseRegisterBody(mds);
                         allGroups.AddRange(groups);
                     }
                 }
@@ -117,78 +114,113 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             return new Model(_compilation, groupOptions!, permOptions!, allGroups.ToImmutableArray(), diags.ToImmutable(), hasFatal: false);
         }
 
-        private IEnumerable<GroupDef> ParseRegisterBody(MethodDeclarationSyntax methodSyntax, IMethodSymbol methodSymbol)
+        private IEnumerable<GroupDef> ParseRegisterBody(MethodDeclarationSyntax methodSyntax)
         {
             var semanticModel = _compilation.GetSemanticModel(methodSyntax.SyntaxTree);
             if (methodSyntax.Body is null && methodSyntax.ExpressionBody is null)
                 yield break;
 
-            var root = methodSyntax.Body != null ? (SyntaxNode)methodSyntax.Body : methodSyntax.ExpressionBody!;
-            // Find all invocations ending with DefineGroup(...)
-            var invocations = root.DescendantNodes().OfType<InvocationExpressionSyntax>();
-            foreach (var inv in invocations)
+            var root = (SyntaxNode)(methodSyntax.Body ?? (SyntaxNode)methodSyntax.ExpressionBody!);
+            var groupsRoot = new List<GroupDef>();
+            // Helper for de-duplication
+            GroupDef GetOrAddGroup(GroupDef? parent, string name, Dictionary<string, ConstValue> props)
             {
-                if (inv.Expression is not MemberAccessExpressionSyntax maes) continue;
-                if (maes.Name.Identifier.Text != "DefineGroup") continue;
+                if (parent is null)
+                {
+                    var existing = groupsRoot.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.Ordinal));
+                    if (existing is not null) return existing;
+                    var created = new GroupDef(name, props, new List<PermissionDef>(), new List<GroupDef>());
+                    groupsRoot.Add(created);
+                    return created;
+                }
+                else
+                {
+                    var existing = parent.Children.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.Ordinal));
+                    if (existing is not null) return existing;
+                    var created = new GroupDef(name, props, new List<PermissionDef>(), new List<GroupDef>());
+                    parent.Children.Add(created);
+                    return created;
+                }
+            }
+            void AddPermissionIfMissing(GroupDef parent, string name, Dictionary<string, ConstValue> props)
+            {
+                if (parent.Permissions.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal))) return;
+                parent.Permissions.Add(new PermissionDef(name, props));
+            }
 
-                var symbolInfo = semanticModel.GetSymbolInfo(maes);
-                if (symbolInfo.Symbol is not IMethodSymbol ms) continue;
-                if (ms.Name != "DefineGroup") continue;
-                // Check receiver type is PermissionBuilder<,>
-                var receiverType = semanticModel.GetTypeInfo(maes.Expression).Type;
-                if (receiverType is null) continue;
-                if (_permissionBuilderSymbol is null) continue;
-                if (receiverType.OriginalDefinition is not INamedTypeSymbol named || !SymbolEqualityComparer.Default.Equals(named, _permissionBuilderSymbol))
+            foreach (var stmt in root.DescendantNodes().OfType<ExpressionStatementSyntax>())
+            {
+                if (stmt.Expression is not InvocationExpressionSyntax invRoot) continue;
+                var calls = FlattenCalls(invRoot).ToList();
+                if (!calls.Any(c => c.Expression is MemberAccessExpressionSyntax maesX && maesX.Name.Identifier.Text == "DefineGroup"))
                     continue;
 
-                var groupDef = BuildGroupDef(inv, semanticModel);
-                if (groupDef is not null)
-                    yield return groupDef;
-            }
-        }
+                var stack = new Stack<GroupDef>();
 
-        private static GroupDef? BuildGroupDef(InvocationExpressionSyntax defineGroupInvocation, SemanticModel semanticModel)
-        {
-            // DefineGroup(string name, Action<TGroupOptions>? configure = null)
-            var args = defineGroupInvocation.ArgumentList.Arguments;
-            if (args.Count == 0) return null;
-            var nameArg = args[0];
-            var groupName = GetConstString(semanticModel, nameArg.Expression);
-            if (groupName is null) return null;
-
-            var groupProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
-            if (args.Count >= 2)
-            {
-                ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, groupProps);
-            }
-
-            var permissions = new List<PermissionDef>();
-
-            // Walk up ancestors to find chained .AddPermission(...)
-            SyntaxNode? node = defineGroupInvocation.Parent;
-            while (node != null)
-            {
-                if (node is InvocationExpressionSyntax inv && inv.Expression is MemberAccessExpressionSyntax maes2 && maes2.Name.Identifier.Text == "AddPermission")
+                foreach (var call in calls)
                 {
-                    var pargs = inv.ArgumentList.Arguments;
-                    if (pargs.Count >= 1)
+                    if (call.Expression is not MemberAccessExpressionSyntax maes) continue;
+                    var methodName = maes.Name.Identifier.Text;
+                    if (methodName == "DefineGroup")
                     {
-                        var permName = GetConstString(semanticModel, pargs[0].Expression);
-                        if (permName is not null)
+                        var args = call.ArgumentList.Arguments;
+                        if (args.Count == 0) continue;
+                        var groupName = GetConstString(semanticModel, args[0].Expression);
+                        if (groupName is null) continue;
+                        var groupProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+                        if (args.Count >= 2)
                         {
-                            var permProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
-                            if (pargs.Count >= 2)
-                            {
-                                ExtractAssignmentsFromLambda(semanticModel, pargs[1].Expression, permProps);
-                            }
-                            permissions.Add(new PermissionDef(permName, permProps));
+                            ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, groupProps);
                         }
+                        var parent = stack.Count == 0 ? null : stack.Peek();
+                        var grp = GetOrAddGroup(parent, groupName, groupProps);
+                        stack.Push(grp);
+                    }
+                    else if (methodName == "AddPermission")
+                    {
+                        if (stack.Count == 0) continue; // skip if no current group
+                        var args = call.ArgumentList.Arguments;
+                        if (args.Count == 0) continue;
+                        var permName = GetConstString(semanticModel, args[0].Expression);
+                        if (permName is null) continue;
+                        var permProps = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+                        if (args.Count >= 2)
+                        {
+                            ExtractAssignmentsFromLambda(semanticModel, args[1].Expression, permProps);
+                        }
+                        AddPermissionIfMissing(stack.Peek(), permName, permProps);
+                    }
+                    else if (methodName == "Then")
+                    {
+                        if (stack.Count > 0) stack.Pop();
                     }
                 }
-                node = node.Parent;
             }
 
-            return new GroupDef(groupName, groupProps, permissions);
+            foreach (var g in groupsRoot)
+                yield return g;
+        }
+
+        private static IEnumerable<InvocationExpressionSyntax> FlattenCalls(InvocationExpressionSyntax root)
+        {
+            var stack = new Stack<InvocationExpressionSyntax>();
+            ExpressionSyntax? cur = root;
+            while (cur is InvocationExpressionSyntax inv && inv.Expression is MemberAccessExpressionSyntax maes)
+            {
+                stack.Push(inv);
+                cur = maes.Expression;
+            }
+            return stack; // Stack enumerates from last pushed to first, which in our loop yields earliest-to-latest calls
+        }
+
+        private static InvocationExpressionSyntax GetOutermostInvocation(InvocationExpressionSyntax node)
+        {
+            SyntaxNode cur = node;
+            while (cur.Parent is InvocationExpressionSyntax parent && parent.Expression is MemberAccessExpressionSyntax)
+            {
+                cur = parent;
+            }
+            return (InvocationExpressionSyntax)cur;
         }
 
         private static void ExtractAssignmentsFromLambda(SemanticModel semanticModel, ExpressionSyntax expr, Dictionary<string, ConstValue> into)
@@ -269,7 +301,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         public static readonly DiagnosticDescriptor InconsistentOptionsTypes = new(
             id: "FP001",
             title: "Inconsistent option types across registrars",
-            messageFormat: "All IPermissionRegistrar implementations must use the same TGroupOptions and TPermissionOptions types within one project.",
+            messageFormat: "All IPermissionRegistrar implementations must use the same TGroupOptions and TPermissionOptions types within one project",
             category: "FluentPermissions",
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -277,7 +309,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         public static readonly DiagnosticDescriptor MissingRegisterMethod = new(
             id: "FP002",
             title: "Registrar missing Register method",
-            messageFormat: "Type implements IPermissionRegistrar but has no valid Register method.",
+            messageFormat: "Type implements IPermissionRegistrar but has no valid Register method",
             category: "FluentPermissions",
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
@@ -371,11 +403,13 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         public string Name { get; }
         public Dictionary<string, ConstValue> Props { get; }
         public List<PermissionDef> Permissions { get; }
-        public GroupDef(string name, Dictionary<string, ConstValue> props, List<PermissionDef> permissions)
+        public List<GroupDef> Children { get; }
+        public GroupDef(string name, Dictionary<string, ConstValue> props, List<PermissionDef> permissions, List<GroupDef> children)
         {
             Name = name;
             Props = props;
             Permissions = permissions;
+            Children = children;
         }
     }
 
@@ -415,13 +449,16 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("public sealed class PermissionGroupInfo");
             sb.AppendLine("{");
             sb.AppendLine("    public string Name { get; }");
+            sb.AppendLine("    public string FullName { get; }");
+            sb.AppendLine("    public string Key { get; }");
             foreach (var prop in gProps)
             {
                 sb.Append("    public ").Append(prop.TypeName).Append(' ').Append(prop.Name).AppendLine(" { get; }");
             }
             sb.AppendLine("    public System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; internal set; }");
+            sb.AppendLine("    public System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> Children { get; internal set; }");
             // ctor
-            sb.Append("    internal PermissionGroupInfo(string name");
+            sb.Append("    internal PermissionGroupInfo(string name, string fullName, string key");
             foreach (var prop in gProps)
             {
                 sb.Append(", ").Append(prop.TypeName).Append(' ').Append(ToCamel(prop.Name));
@@ -429,11 +466,14 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine(")");
             sb.AppendLine("    {");
             sb.AppendLine("        Name = name;");
+            sb.AppendLine("        FullName = fullName;");
+            sb.AppendLine("        Key = key;");
             foreach (var prop in gProps)
             {
                 sb.Append("        ").Append(prop.Name).Append(" = ").Append(ToCamel(prop.Name)).AppendLine(";");
             }
             sb.AppendLine("        Permissions = System.Array.Empty<PermissionItemInfo>();");
+            sb.AppendLine("        Children = System.Array.Empty<PermissionGroupInfo>();");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();
@@ -442,6 +482,8 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("{");
             sb.AppendLine("    public string Name { get; }");
             sb.AppendLine("    public string GroupName { get; }");
+            sb.AppendLine("    public string FullName { get; }");
+            sb.AppendLine("    public string Key { get; }");
             sb.AppendLine("    public PermissionGroupInfo? Group { get; internal set; }");
             foreach (var prop in pProps)
             {
@@ -450,7 +492,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             // implicit conversion
             sb.AppendLine("    public static implicit operator string?(PermissionItemInfo permission) => permission?.Name;");
             // ctor
-            sb.Append("    internal PermissionItemInfo(string name, string groupName");
+            sb.Append("    internal PermissionItemInfo(string name, string groupName, string fullName, string key");
             foreach (var prop in pProps)
             {
                 sb.Append(", ").Append(prop.TypeName).Append(' ').Append(ToCamel(prop.Name));
@@ -459,6 +501,8 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("    {");
             sb.AppendLine("        Name = name;");
             sb.AppendLine("        GroupName = groupName;");
+            sb.AppendLine("        FullName = fullName;");
+            sb.AppendLine("        Key = key;");
             foreach (var prop in pProps)
             {
                 sb.Append("        ").Append(prop.Name).Append(" = ").Append(ToCamel(prop.Name)).AppendLine(";");
@@ -486,73 +530,191 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("public static partial class AppPermissions");
             sb.AppendLine("{");
 
-            // Field declarations
-            foreach (var group in model.Groups)
-            {
-                sb.Append("    public static readonly PermissionGroupInfo ").Append(SafeIdent(group.Name)).Append("Group = new PermissionGroupInfo(")
-                    .Append(EscapeString(group.Name));
-                foreach (var gp in gProps)
-                {
-                    group.Props.TryGetValue(gp.Name, out var val);
-                    sb.Append(", ").Append(val?.ToCSharpLiteral() ?? gp.DefaultLiteral);
-                }
-                sb.AppendLine(");");
+            var keys = new List<(string ConstName, string KeyValue)>();
 
-                foreach (var perm in group.Permissions)
-                {
-                    sb.Append("    public static readonly PermissionItemInfo ")
-                        .Append(SafeIdent(group.Name)).Append('_').Append(SafeIdent(perm.Name))
-                        .Append(" = new PermissionItemInfo(")
-                        .Append(EscapeString(perm.Name)).Append(", ")
-                        .Append(EscapeString(group.Name));
-                    foreach (var pp in pProps)
-                    {
-                        perm.Props.TryGetValue(pp.Name, out var val);
-                        sb.Append(", ").Append(val?.ToCSharpLiteral() ?? pp.DefaultLiteral);
-                    }
-                    sb.AppendLine(");");
-                }
+            // Recursive declare fields
+            foreach (var root in model.Groups)
+            {
+                DeclareGroupAndChildren(sb, root, new List<string>(), gProps, pProps, keys);
             }
 
             // Static ctor: link graph
             sb.AppendLine();
             sb.AppendLine("    static AppPermissions()");
             sb.AppendLine("    {");
-            foreach (var group in model.Groups)
+            foreach (var root in model.Groups)
             {
-                var items = group.Permissions.Select(p => SafeIdent(group.Name) + "_" + SafeIdent(p.Name));
-                sb.Append("        ").Append(SafeIdent(group.Name)).Append("Group.Permissions = new PermissionItemInfo[] { ")
-                    .Append(string.Join(", ", items)).AppendLine(" };");
-                foreach (var perm in group.Permissions)
-                {
-                    sb.Append("        ").Append(SafeIdent(group.Name)).Append('_').Append(SafeIdent(perm.Name)).Append(".Group = ")
-                        .Append(SafeIdent(group.Name)).AppendLine("Group;");
-                }
+                LinkGroup(sb, root, new List<string>());
             }
             sb.AppendLine("    }");
 
             // Nested classes per group
             sb.AppendLine();
-            foreach (var group in model.Groups)
+            foreach (var root in model.Groups)
             {
-                sb.Append("    public static class ").Append(SafeIdent(group.Name)).AppendLine();
-                sb.AppendLine("    {");
-                sb.Append("        public static readonly PermissionGroupInfo Group = ").Append(SafeIdent(group.Name)).AppendLine("Group;");
-                foreach (var perm in group.Permissions)
-                {
-                    sb.Append("        public static readonly PermissionItemInfo ").Append(SafeIdent(perm.Name)).Append(" = ")
-                        .Append(SafeIdent(group.Name)).Append('_').Append(SafeIdent(perm.Name)).AppendLine(";");
-                }
-                sb.AppendLine("    }");
+                BuildNestedAccessors(sb, root, new List<string>());
             }
 
             sb.AppendLine();
             // Access helpers
-            sb.AppendLine("    public static System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> GetAllGroups() => new PermissionGroupInfo[] {");
-            sb.Append("        ").Append(string.Join(", ", model.Groups.Select(g => SafeIdent(g.Name) + "Group"))).AppendLine();
-            sb.AppendLine("    };\n}");
+            sb.AppendLine("    public static global::System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> GetAllGroups() => new PermissionGroupInfo[] {");
+            sb.Append("        ").Append(string.Join(", ", model.Groups.Select(g => FieldNameForGroup(new List<string>(), g.Name)))).AppendLine();
+            sb.AppendLine("    };");
+
+            // Flat Keys class
+            sb.AppendLine();
+            sb.AppendLine("    public static class Keys");
+            sb.AppendLine("    {");
+            foreach (var (constName, keyValue) in keys.OrderBy(k => k.ConstName, System.StringComparer.Ordinal))
+            {
+                sb.Append("        public const string ").Append(constName).Append(" = ").Append(EscapeString(keyValue)).AppendLine(";");
+            }
+            sb.AppendLine("    }");
+
+            sb.AppendLine("}");
 
             return sb.ToString();
+        }
+
+        private static void DeclareGroupAndChildren(StringBuilder sb, GroupDef group, List<string> path, List<OptionProperty> gProps, List<OptionProperty> pProps, List<(string ConstName, string KeyValue)> keys)
+        {
+            var newPath = new List<string>(path) { group.Name };
+            var dotted = string.Join(".", newPath);
+            var fullName = dotted.Replace('.', '_');
+            var key = ComputeSha256Hex(dotted);
+
+            // Group field
+            sb.Append("    public static readonly PermissionGroupInfo ").Append(FieldNameForGroup(path, group.Name))
+                .Append(" = new PermissionGroupInfo(")
+                .Append(EscapeString(group.Name)).Append(", ")
+                .Append(EscapeString(fullName)).Append(", ")
+                .Append(EscapeString(key));
+            foreach (var gp in gProps)
+            {
+                group.Props.TryGetValue(gp.Name, out var val);
+                sb.Append(", ").Append(val?.ToCSharpLiteral() ?? gp.DefaultLiteral);
+            }
+            sb.AppendLine(");");
+
+            // Permissions fields
+            foreach (var perm in group.Permissions)
+            {
+                var permDotted = dotted + "." + perm.Name;
+                var permFull = permDotted.Replace('.', '_');
+                var permKey = ComputeSha256Hex(permDotted);
+                var fieldName = FieldNameForPermission(newPath, perm.Name);
+                sb.Append("    public static readonly PermissionItemInfo ")
+                    .Append(fieldName)
+                    .Append(" = new PermissionItemInfo(")
+                    .Append(EscapeString(perm.Name)).Append(", ")
+                    .Append(EscapeString(dotted)).Append(", ")
+                    .Append(EscapeString(permFull)).Append(", ")
+                    .Append(EscapeString(permKey));
+                foreach (var pp in pProps)
+                {
+                    perm.Props.TryGetValue(pp.Name, out var val);
+                    sb.Append(", ").Append(val?.ToCSharpLiteral() ?? pp.DefaultLiteral);
+                }
+                sb.AppendLine(");");
+                // Collect Keys constants
+                keys.Add((permFull, permKey));
+            }
+
+            // Children groups recursively
+            foreach (var child in group.Children)
+            {
+                DeclareGroupAndChildren(sb, child, newPath, gProps, pProps, keys);
+            }
+        }
+
+        private static void LinkGroup(StringBuilder sb, GroupDef group, List<string> path)
+        {
+            var fieldName = FieldNameForGroup(path, group.Name);
+            var newPath = new List<string>(path) { group.Name };
+
+            // Link permissions
+            if (group.Permissions.Count > 0)
+            {
+                var items = group.Permissions.Select(p => FieldNameForPermission(newPath, p.Name));
+                sb.Append("        ").Append(fieldName).Append(".Permissions = new PermissionItemInfo[] { ")
+                    .Append(string.Join(", ", items)).AppendLine(" };");
+                foreach (var p in group.Permissions)
+                {
+                    sb.Append("        ").Append(FieldNameForPermission(newPath, p.Name)).Append(".Group = ")
+                        .Append(fieldName).AppendLine(";");
+                }
+            }
+
+            // Link children groups
+            if (group.Children.Count > 0)
+            {
+                var childrenFields = group.Children.Select(ch => FieldNameForGroup(newPath, ch.Name));
+                sb.Append("        ").Append(fieldName).Append(".Children = new PermissionGroupInfo[] { ")
+                    .Append(string.Join(", ", childrenFields)).AppendLine(" };");
+            }
+
+            foreach (var child in group.Children)
+                LinkGroup(sb, child, newPath);
+        }
+
+        private static void BuildNestedAccessors(StringBuilder sb, GroupDef group, List<string> path)
+        {
+            var newPath = new List<string>(path) { group.Name };
+            sb.Append("    public static class ").Append(SafeIdent(group.Name)).AppendLine();
+            sb.AppendLine("    {");
+            sb.Append("        public static readonly PermissionGroupInfo Group = ").Append(FieldNameForGroup(path, group.Name)).AppendLine(";");
+
+            // Names (dotted) constants for permissions
+            if (group.Permissions.Count > 0)
+            {
+                sb.AppendLine("        public static class Names");
+                sb.AppendLine("        {");
+                var dottedBase = string.Join(".", newPath);
+                foreach (var p in group.Permissions)
+                {
+                    var dotted = dottedBase + "." + p.Name;
+                    sb.Append("            public const string ").Append(SafeIdent(p.Name)).Append(" = ")
+                        .Append(EscapeString(dotted)).AppendLine(";");
+                }
+                sb.AppendLine("        }");
+            }
+
+            foreach (var p in group.Permissions)
+            {
+                sb.Append("        public static readonly PermissionItemInfo ").Append(SafeIdent(p.Name)).Append(" = ")
+                    .Append(FieldNameForPermission(newPath, p.Name)).AppendLine(";");
+            }
+
+            foreach (var child in group.Children)
+            {
+                BuildNestedAccessors(sb, child, newPath);
+            }
+
+            sb.AppendLine("    }");
+        }
+
+        private static string FieldNameForGroup(List<string> path, string name)
+        {
+            var full = string.Join("_", path.Append(name).Select(SafeIdent));
+            return full + "Group";
+        }
+
+        private static string FieldNameForPermission(List<string> path, string name)
+        {
+            var full = string.Join("_", path.Append(name).Select(SafeIdent));
+            return full;
+        }
+
+        private static string ComputeSha256Hex(string input)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+                var hash = sha.ComputeHash(bytes);
+                var sb = new StringBuilder(hash.Length * 2);
+                for (int i = 0; i < hash.Length; i++) sb.Append(hash[i].ToString("x2"));
+                return sb.ToString();
+            }
         }
 
         private static List<OptionProperty> GetOptionProperties(ITypeSymbol options)
@@ -589,7 +751,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         private static string SafeIdent(string name)
         {
             var sb = new StringBuilder(name.Length);
-            if (!SyntaxFacts.IsIdentifierStartCharacter(name[0])) sb.Append('_');
+            if (name.Length == 0 || !SyntaxFacts.IsIdentifierStartCharacter(name[0])) sb.Append('_');
             foreach (var ch in name)
             {
                 sb.Append(SyntaxFacts.IsIdentifierPartCharacter(ch) ? ch : '_');

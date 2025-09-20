@@ -7,25 +7,38 @@ public static class Program
 {
     public static void Main()
     {
-        // 访问生成的权限组与权限项
-        var group = AppPermissions.Management.Group;
-        Console.WriteLine($"Group: {group.Name}, Icon: {group.Icon}, DisplayOrder: {group.DisplayOrder}, Description: {group.Description}");
+        // 访问生成的层级结构：System -> Users -> Create/Delete
+        var system = AppPermissions.System.Group;
+        Console.WriteLine($"Group: {system.Name}, FullName: {system.FullName}, Key: {system.Key}, Icon: {system.Icon}, Order: {system.DisplayOrder}, Desc: {system.Description}");
 
-        var users = AppPermissions.Management.Users;
-        Console.WriteLine($"Permission: {users.Name}, Group: {users.GroupName}, IsHighRisk: {users.IsHighRisk}, Description: {users.Description}");
+        var users = AppPermissions.System.Users.Group;
+        Console.WriteLine($"Child Group: {users.Name}, FullName: {users.FullName}, Key: {users.Key}");
 
-        var settings = AppPermissions.Management.Settings;
-        Console.WriteLine($"Permission: {settings.Name}, Group: {settings.GroupName}, IsHighRisk: {settings.IsHighRisk}, Description: {settings.Description}");
+        var create = AppPermissions.System.Users.Create;
+        var delete = AppPermissions.System.Users.Delete;
+        Console.WriteLine($"Perm: {create.FullName}, Key: {create.Key}, Desc: {create.Description}");
+        Console.WriteLine($"Perm: {delete.FullName}, Key: {delete.Key}, Desc: {delete.Description}, HighRisk: {delete.IsHighRisk}");
 
-        // 导航关系校验
-        Console.WriteLine($"Users.Group == group? {ReferenceEquals(users.Group, group)}");
-        Console.WriteLine($"Settings.Group == group? {ReferenceEquals(settings.Group, group)}");
-        Console.WriteLine($"Group.Permissions.Count: {group.Permissions.Count}");
+        // Keys 常量访问（全局扁平映射）
+        Console.WriteLine("Keys mapping:");
+        Console.WriteLine($"System_Users_Create => {AppPermissions.Keys.System_Users_Create}");
+        Console.WriteLine($"System_Users_Delete => {AppPermissions.Keys.System_Users_Delete}");
 
-        Console.WriteLine("All groups:");
+        // 导航关系
+        Console.WriteLine($"Users.Group == System? {ReferenceEquals(users, system)}");
+        Console.WriteLine($"Create.Group == Users? {ReferenceEquals(create.Group, users)}");
+        Console.WriteLine($"System.Children.Count: {system.Children.Count}");
+        Console.WriteLine($"Users.Permissions.Count: {users.Permissions.Count}");
+
+        Console.WriteLine("All root groups:");
         foreach (var g in AppPermissions.GetAllGroups())
         {
-            Console.WriteLine($"- {g.Name} ({g.Permissions.Count} perms)");
+            Console.WriteLine($"- {g.FullName} ({g.Permissions.Count} perms, {g.Children.Count} children)");
         }
     }
+}
+
+public class TestAttribute(string name) : Attribute
+{
+    public string Name { get; } = name;
 }

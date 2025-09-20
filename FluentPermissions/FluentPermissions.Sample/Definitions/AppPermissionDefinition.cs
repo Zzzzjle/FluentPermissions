@@ -8,20 +8,40 @@ public class AppPermissionDefinition : IPermissionRegistrar<SampleGroupOptions, 
     public void Register(PermissionBuilder<SampleGroupOptions, SamplePermissionOptions> builder)
     {
         builder
-            .DefineGroup("Management", options =>
+            .DefineGroup("System", o =>
             {
-                options.Description = "后台管理";
-                options.Icon = "fa-cogs";
-                options.DisplayOrder = 100;
+                o.Description = "系统";
+                o.Icon = "fa-gear";
+                o.DisplayOrder = 10;
             })
-                .AddPermission("Users", options =>
-                {
-                    options.Description = "管理用户";
-                })
-                .AddPermission("Settings", options =>
-                {
-                    options.Description = "管理系统设置";
-                    options.IsHighRisk = true;
-                });
+            .DefineGroup("Users", o =>
+            {
+                o.Description = "用户";
+                o.DisplayOrder = 1;
+            })
+            .AddPermission("Create", o => { o.Description = "创建用户"; })
+            .AddPermission("Delete", o =>
+            {
+                o.Description = "删除用户";
+                o.IsHighRisk = true;
+            })
+            .Then()
+            .DefineGroup("Roles", o =>
+            {
+                o.Description = "角色";
+                o.DisplayOrder = 2;
+            })
+            .AddPermission("Create", o => { o.Description = "创建角色"; })
+            .AddPermission("Assign", o => { o.Description = "分配角色"; })
+            .Then()
+            .Then()
+            .DefineGroup("Reports", o =>
+            {
+                o.Description = "报表";
+                o.Icon = "fa-chart";
+                o.DisplayOrder = 20;
+            })
+            .AddPermission("View", o => { o.Description = "查看报表"; })
+            .AddPermission("Export", o => { o.Description = "导出报表"; });
     }
 }
