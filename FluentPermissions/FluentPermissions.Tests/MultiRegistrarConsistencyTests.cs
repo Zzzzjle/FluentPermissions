@@ -30,7 +30,7 @@ public class HrRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermission
         builder.DefineGroup("HR", "人资", h =>
         {
             h.WithOptions(o => { o.Order = 200; });
-            h.AddPermission("Edit", "编辑", null, o => { o.Critical = true; });
+            h.AddPermission("Edit", "编辑", o => { o.Critical = true; });
         });
     }
 }
@@ -76,7 +76,7 @@ public class MultiRegistrarConsistencyTests
         var edit = perms[0];
         var keyProp = edit.GetType().GetProperty("Key")!;
         var critProp = edit.GetType().GetProperty("Critical")!;
-    Assert.Equal("HR_Edit", (string)keyProp.GetValue(edit)!);
+        Assert.Equal("HR_Edit", (string)keyProp.GetValue(edit)!);
         Assert.True((bool)critProp.GetValue(edit)!);
 
         // Keys constants present

@@ -12,7 +12,6 @@ public sealed class PermissionBuilder<TGroupOptions, TPermissionOptions>
     where TGroupOptions : PermissionOptionsBase, new()
     where TPermissionOptions : PermissionOptionsBase, new()
 {
-
     /// <summary>
     /// 定义顶层权限组，并在提供的 <paramref name="configureGroup"/> lambda 作用域内完成组内结构与元数据配置。
     /// 该方法返回父级 <see cref="PermissionBuilder{TGroupOptions,TPermissionOptions}"/> 以便继续定义其他顶层组。
@@ -45,7 +44,7 @@ public sealed class PermissionBuilder<TGroupOptions, TPermissionOptions>
     public PermissionBuilder<TGroupOptions, TPermissionOptions> DefineGroup(
         string logicalName,
         string displayName,
-        string? description,
+        string description,
         Action<PermissionGroupBuilder<TGroupOptions, TPermissionOptions>> configureGroup)
     {
         var child = new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);
@@ -104,7 +103,7 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
     /// 定义权限项并指定显示名与描述。
     /// </summary>
     public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
-        string displayName, string? description)
+        string displayName, string description)
         => this;
 
     /// <summary>
@@ -125,7 +124,7 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
     /// 定义权限项，最完整重载。
     /// </summary>
     public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> AddPermission(string logicalName,
-        string displayName, string? description, Action<TPermissionOptions> configure)
+        string displayName, string description, Action<TPermissionOptions> configure)
         => this;
 
     // 旧的链式子组 DefineGroup 风格已移除，保留仅支持 builder-lambda 的重载。
@@ -162,7 +161,7 @@ public sealed class PermissionGroupBuilder<TGroupOptions, TPermissionOptions>
     public PermissionGroupBuilder<TGroupOptions, TPermissionOptions> DefineGroup(
         string logicalName,
         string displayName,
-        string? description,
+        string description,
         Action<PermissionGroupBuilder<TGroupOptions, TPermissionOptions>> configureGroup)
     {
         var child = new PermissionGroupBuilder<TGroupOptions, TPermissionOptions>(logicalName);

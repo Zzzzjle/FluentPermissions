@@ -23,8 +23,8 @@ internal static class SourceBuilders
         sb.AppendLine("        public string Key { get; }");
         sb.AppendLine("        public string? ParentKey { get; }");
         sb.AppendLine("        public string LogicalName { get; }");
-        sb.AppendLine("        public string? DisplayName { get; }");
-        sb.AppendLine("        public string? Description { get; }");
+        sb.AppendLine("        public string DisplayName { get; }");
+        sb.AppendLine("        public string Description { get; }");
         // emit strong-typed group option properties
         foreach (var prop in model.GroupOptionProps)
         {
@@ -44,7 +44,7 @@ internal static class SourceBuilders
         sb.AppendLine(
             "        public global::System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; }");
         sb.AppendLine(
-            "        public PermissionGroupInfo(string key, string logicalName, string? displayName, string? description,");
+            "        public PermissionGroupInfo(string key, string logicalName, string displayName, string description,");
         sb.AppendLine("            string? parentKey,");
         // constructor params for group option props
         foreach (var prop in model.GroupOptionProps)
@@ -79,8 +79,8 @@ internal static class SourceBuilders
         sb.AppendLine("    {");
         sb.AppendLine("        public string Key { get; }");
         sb.AppendLine("        public string LogicalName { get; }");
-        sb.AppendLine("        public string? DisplayName { get; }");
-        sb.AppendLine("        public string? Description { get; }");
+        sb.AppendLine("        public string DisplayName { get; }");
+        sb.AppendLine("        public string Description { get; }");
         // emit strong-typed permission option properties
         foreach (var prop in model.PermOptionProps)
         {
@@ -97,7 +97,7 @@ internal static class SourceBuilders
 
         sb.AppendLine("        public string GroupKey { get; }");
         sb.AppendLine(
-            "        public PermissionItemInfo(string key, string logicalName, string? displayName, string? description,");
+            "        public PermissionItemInfo(string key, string logicalName, string displayName, string description,");
         // constructor params for permission option props
         foreach (var prop in model.PermOptionProps)
         {
@@ -256,14 +256,20 @@ internal static class SourceBuilders
                     if (!first) permItems.Append(", ");
                     first = false;
                     var pArgs = new StringBuilder();
+                    var pDisplay = p.DisplayName is null ? $"\"{p.LogicalName}\"" : ToLiteral(p.DisplayName);
+                    var pDesc = p.Description is null ? "string.Empty" : ToLiteral(p.Description);
                     pArgs.Append(
-                        $"\"{key}_{p.LogicalName}\", \"{p.LogicalName}\", {ToNullableLiteral(p.DisplayName)}, {ToNullableLiteral(p.Description)}");
+                        $"\"{key}_{p.LogicalName}\", \"{p.LogicalName}\", {pDisplay}, {pDesc}");
                     foreach (var prop in model.PermOptionProps)
                     {
                         var has = p.Props.TryGetValue(prop.Name, out var val);
                         var lit = has
                             ? val!.ToEmitLiteral()
-                            : prop.Kind == ConstKind.String ? "null" : prop.Kind == ConstKind.Bool ? "false" : "0";
+                            : prop.Kind == ConstKind.String
+                                ? "null"
+                                : prop.Kind == ConstKind.Bool
+                                    ? "false"
+                                    : "0";
                         pArgs.Append(", ").Append(lit);
                     }
 
@@ -276,14 +282,20 @@ internal static class SourceBuilders
 
             // emit group with typed options and readonly children/perms
             var gArgs = new StringBuilder();
+            var gDisplay = g.DisplayName is null ? $"\"{g.LogicalName}\"" : ToLiteral(g.DisplayName);
+            var gDesc = g.Description is null ? "string.Empty" : ToLiteral(g.Description);
             gArgs.Append(
-                $"\"{key}\", \"{g.LogicalName}\", {ToNullableLiteral(g.DisplayName)}, {ToNullableLiteral(g.Description)}, {(parentKey is null ? "null" : $"\"{parentKey}\"")}");
+                $"\"{key}\", \"{g.LogicalName}\", {gDisplay}, {gDesc}, {(parentKey is null ? "null" : $"\"{parentKey}\"")}");
             foreach (var prop in model.GroupOptionProps)
             {
                 var has = g.Props.TryGetValue(prop.Name, out var val);
                 var lit = has
                     ? val!.ToEmitLiteral()
-                    : prop.Kind == ConstKind.String ? "null" : prop.Kind == ConstKind.Bool ? "false" : "0";
+                    : prop.Kind == ConstKind.String
+                        ? "null"
+                        : prop.Kind == ConstKind.Bool
+                            ? "false"
+                            : "0";
                 gArgs.Append(", ").Append(lit);
             }
 
@@ -325,6 +337,9 @@ internal static class SourceBuilders
     private static string ToNullableLiteral(string? s) =>
         s is null ? "null" : "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
 
+    private static string ToLiteral(string s) =>
+        "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
+
     private static string GetRootNamespace(Compilation compilation)
     {
         var asm = compilation.AssemblyName ?? "FluentPermissions";
@@ -341,5 +356,4 @@ internal static class SourceBuilders
         if (sb.Length == 0 || (!char.IsLetter(sb[0]) && sb[0] != '_')) sb.Insert(0, '_');
         return sb.ToString();
     }
-
 }

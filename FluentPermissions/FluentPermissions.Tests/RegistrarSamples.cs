@@ -24,7 +24,7 @@ public class TestRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermissi
         {
             g1.WithOptions(o => { o.Order = 7; });
             g1.AddPermission("P1", "Perm1");
-            g1.AddPermission("P2", "Perm2", null, o => { o.Critical = true; });
+            g1.AddPermission("P2", "Perm2", o => { o.Critical = true; });
         });
     }
 }
@@ -40,14 +40,14 @@ public class GeneratorUsageTests
         var appPermissionsType = typeof(GeneratorUsageTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 
-    // 通过嵌套访问器获取组实例
-    var nestedG1 = appPermissionsType.GetNestedType("G1");
-    Assert.NotNull(nestedG1);
-    var nestedGroupField = nestedG1.GetField("Group");
-    Assert.NotNull(nestedGroupField);
-    var group = nestedGroupField.GetValue(null)!;
+        // 通过嵌套访问器获取组实例
+        var nestedG1 = appPermissionsType.GetNestedType("G1");
+        Assert.NotNull(nestedG1);
+        var nestedGroupField = nestedG1.GetField("Group");
+        Assert.NotNull(nestedGroupField);
+        var group = nestedGroupField.GetValue(null)!;
 
-    // 反射类型: PermissionGroupInfo
+        // 反射类型: PermissionGroupInfo
         var groupType = group.GetType();
         var logicalNameProp = groupType.GetProperty("LogicalName")!;
         var displayNameProp = groupType.GetProperty("DisplayName")!;
@@ -75,13 +75,13 @@ public class GeneratorUsageTests
 
         Assert.Equal("P1", pLogical.GetValue(p1));
         Assert.Equal("Perm1", pDisplay.GetValue(p1));
-        Assert.Null(pDesc.GetValue(p1));
+        Assert.Equal(string.Empty, pDesc.GetValue(p1));
         Assert.False((bool)pCritical.GetValue(p1)!);
         Assert.Equal("G1", pGroupKey.GetValue(p1));
 
         Assert.Equal("P2", pLogical.GetValue(p2));
         Assert.Equal("Perm2", pDisplay.GetValue(p2));
-        Assert.Null(pDesc.GetValue(p2));
+        Assert.Equal(string.Empty, pDesc.GetValue(p2));
         Assert.True((bool)pCritical.GetValue(p2)!);
 
         var p1Field = nestedG1.GetField("P1");
