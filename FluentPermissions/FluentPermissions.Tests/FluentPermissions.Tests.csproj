@@ -20,7 +20,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\FluentPermissions\FluentPermissions.csproj"/>
+        <!-- 引入生成器作为 Analyzer 以在测试项目内触发源码生成 -->
+        <ProjectReference Include="..\FluentPermissions\FluentPermissions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <!-- 直接引用 Core 契约类型供测试代码使用 -->
+        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj" />
     </ItemGroup>
 
 
