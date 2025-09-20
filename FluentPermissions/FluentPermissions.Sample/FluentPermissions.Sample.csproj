@@ -4,13 +4,13 @@
         <TargetFramework>net9.0</TargetFramework>
         <Nullable>enable</Nullable>
         <RootNamespace>FluentPermissions.Sample</RootNamespace>
-            <OutputType>Exe</OutputType>
-          <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-          <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\generated</CompilerGeneratedFilesOutputPath>
+        <OutputType>Exe</OutputType>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\generated</CompilerGeneratedFilesOutputPath>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj" />
+        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj"/>
         <ProjectReference Include="..\FluentPermissions\FluentPermissions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
     </ItemGroup>
 

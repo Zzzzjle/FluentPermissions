@@ -498,6 +498,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("    public string? Description { get; }");
             sb.AppendLine("    public string FullName { get; }");
             sb.AppendLine("    public string Key { get; }");
+            sb.AppendLine("    public string? ParentKey { get; }");
             foreach (var prop in gProps)
             {
                 sb.Append("    public ").Append(prop.TypeName).Append(' ').Append(prop.Name).AppendLine(" { get; }");
@@ -505,7 +506,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("    public System.Collections.Generic.IReadOnlyList<PermissionItemInfo> Permissions { get; }");
             sb.AppendLine("    public System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> Children { get; }");
             // ctor
-            sb.Append("    internal PermissionGroupInfo(string logicalName, string displayName, string? description, string fullName, string key, System.Collections.Generic.IReadOnlyList<PermissionItemInfo> permissions, System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> children");
+            sb.Append("    internal PermissionGroupInfo(string logicalName, string displayName, string? description, string fullName, string key, string? parentKey, System.Collections.Generic.IReadOnlyList<PermissionItemInfo> permissions, System.Collections.Generic.IReadOnlyList<PermissionGroupInfo> children");
             foreach (var prop in gProps)
             {
                 sb.Append(", ").Append(prop.TypeName).Append(' ').Append(ToCamel(prop.Name));
@@ -518,6 +519,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             sb.AppendLine("        Description = description;");
             sb.AppendLine("        FullName = fullName;");
             sb.AppendLine("        Key = key;");
+            sb.AppendLine("        ParentKey = parentKey;");
             sb.AppendLine("        Permissions = permissions;");
             sb.AppendLine("        Children = children;");
             foreach (var prop in gProps)
@@ -697,6 +699,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
                 .Append(EscapeString(group.Description)).Append(", ")
                 .Append(EscapeString(fullName)).Append(", ")
                 .Append(EscapeString(dotted)).Append(", ")
+                .Append(path.Count == 0 ? "null" : EscapeString(string.Join(".", path))).Append(", ")
                 .Append(permArray).Append(", ")
                 .Append(childArray);
             foreach (var gp in gProps)
