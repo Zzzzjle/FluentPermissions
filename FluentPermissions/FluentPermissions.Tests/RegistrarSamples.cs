@@ -8,6 +8,7 @@ namespace FluentPermissions.Tests;
 public class TestGroupOptions : PermissionOptionsBase
 {
     public int Order { get; set; }
+    public string? Icon { get; set; }
 }
 
 public class TestPermissionOptions : PermissionOptionsBase

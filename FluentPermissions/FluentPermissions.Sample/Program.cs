@@ -40,7 +40,6 @@ public static class Program
         Console.WriteLine("All root groups:");
         foreach (var g in AppPermissions.GetAllGroups())
         {
-            PermissionModels.RegistrarData.Build(); // Ensure built
             Console.WriteLine($"- {g.FullName} ({g.Permissions.Count} perms, {g.Children.Count} children)");
         }
     }

@@ -58,8 +58,35 @@ internal sealed class Analyzer(Compilation compilation)
             }
         }
 
+        var groupProps = CollectOptionProps(groupOptions as INamedTypeSymbol);
+        var permProps = CollectOptionProps(permOptions as INamedTypeSymbol);
+
         return new Model(compilation, allGroups.ToImmutableArray(),
-            diags.ToImmutable(), hasFatal: false);
+            diags.ToImmutable(), hasFatal: false, groupOptionProps: groupProps, permOptionProps: permProps);
+    }
+
+    private static ImmutableArray<OptionProp> CollectOptionProps(INamedTypeSymbol? optionType)
+    {
+        if (optionType is null) return ImmutableArray<OptionProp>.Empty;
+        var list = new List<OptionProp>();
+        foreach (var m in optionType.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (m.IsStatic) continue;
+            if (m.DeclaredAccessibility != Accessibility.Public) continue;
+            // Only consider simple primitive-like types we can embed as literals
+            var st = m.Type.SpecialType;
+            ConstKind? kind = st switch
+            {
+                SpecialType.System_Boolean => ConstKind.Bool,
+                SpecialType.System_Int32 => ConstKind.Int,
+                SpecialType.System_Double => ConstKind.Double,
+                SpecialType.System_String => ConstKind.String,
+                _ => null
+            };
+            if (kind is null) continue;
+            list.Add(new OptionProp(m.Name, kind.Value));
+        }
+        return list.ToImmutableArray();
     }
 
     private IEnumerable<GroupDef> ParseRegisterBody(MethodDeclarationSyntax methodSyntax)
@@ -68,12 +95,23 @@ internal sealed class Analyzer(Compilation compilation)
         if (methodSyntax.Body is null && methodSyntax.ExpressionBody is null)
             yield break;
 
-        var root = methodSyntax.Body ?? (SyntaxNode)methodSyntax.ExpressionBody!;
         var groupsRoot = new List<GroupDef>();
 
-        foreach (var stmt in root.DescendantNodes().OfType<ExpressionStatementSyntax>())
+        IEnumerable<InvocationExpressionSyntax> topLevelInvocations = System.Linq.Enumerable.Empty<InvocationExpressionSyntax>();
+        if (methodSyntax.Body is BlockSyntax block)
         {
-            if (stmt.Expression is not InvocationExpressionSyntax invRoot) continue;
+            topLevelInvocations = block.Statements
+                .OfType<ExpressionStatementSyntax>()
+                .Select(s => s.Expression)
+                .OfType<InvocationExpressionSyntax>();
+        }
+        else if (methodSyntax.ExpressionBody is { Expression: InvocationExpressionSyntax arrowInv })
+        {
+            topLevelInvocations = new[] { arrowInv };
+        }
+
+        foreach (var invRoot in topLevelInvocations)
+        {
             var calls = FlattenCalls(invRoot).ToList();
             if (!calls.Any(c => c.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "DefineGroup" }))
                 continue;
@@ -270,6 +308,10 @@ internal sealed class Analyzer(Compilation compilation)
                         if (builderLambda is not null)
                         {
                             ProcessBuilderLambda(grp, builderLambda, semanticModel);
+                            if (stack.Count > 0 && ReferenceEquals(stack.Peek(), grp))
+                            {
+                                stack.Pop();
+                            }
                         }
                     }
                     break;

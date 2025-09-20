@@ -61,14 +61,24 @@ internal sealed class RegistrarInfo(INamedTypeSymbol symbol, INamedTypeSymbol @i
     public INamedTypeSymbol Interface { get; } = @interface;
 }
 
+internal sealed class OptionProp(string name, ConstKind kind)
+{
+    public string Name { get; } = name;
+    public ConstKind Kind { get; } = kind;
+}
+
 internal sealed class Model(
     Compilation compilation,
     ImmutableArray<GroupDef> rootGroups,
     ImmutableArray<Diagnostic> diagnostics,
-    bool hasFatal)
+    bool hasFatal,
+    ImmutableArray<OptionProp>? groupOptionProps = null,
+    ImmutableArray<OptionProp>? permOptionProps = null)
 {
     public Compilation Compilation { get; } = compilation;
     public ImmutableArray<GroupDef> RootGroups { get; } = rootGroups;
     public ImmutableArray<Diagnostic> Diagnostics { get; } = diagnostics;
     public bool HasFatal { get; } = hasFatal;
+    public ImmutableArray<OptionProp> GroupOptionProps { get; } = groupOptionProps ?? ImmutableArray<OptionProp>.Empty;
+    public ImmutableArray<OptionProp> PermOptionProps { get; } = permOptionProps ?? ImmutableArray<OptionProp>.Empty;
 }
