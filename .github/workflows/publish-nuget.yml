@@ -37,9 +37,17 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build
 
-      - name: Pack FluentPermissions analyzer
+      # 同时打包 Core 与 Analyzer（版本取自 tag）
+      - name: Pack FluentPermissions.Core
         run: |
           mkdir -p out
+          dotnet pack FluentPermissions/FluentPermissions.Core/FluentPermissions.Core.csproj \
+            -c Release -o ./out \
+            /p:ContinuousIntegrationBuild=true \
+            /p:PackageVersion=${{ steps.vars.outputs.version }}
+
+      - name: Pack FluentPermissions analyzer
+        run: |
           dotnet pack FluentPermissions/FluentPermissions/FluentPermissions.csproj \
             -c Release -o ./out \
             /p:ContinuousIntegrationBuild=true \

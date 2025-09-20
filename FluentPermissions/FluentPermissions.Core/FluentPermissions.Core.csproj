@@ -4,6 +4,29 @@
         <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>preview</LangVersion>
         <Nullable>enable</Nullable>
+
+        <!-- NuGet 包元数据 -->
+        <IsPackable>true</IsPackable>
+        <PackageId>FluentPermissions.Core</PackageId>
+        <Description>Core abstractions and helpers for FluentPermissions.</Description>
+        <Authors>Zzzzjle</Authors>
+        <RepositoryUrl>https://github.com/Zzzzjle/FluentPermissions</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageTags>permissions;authorization;fluent</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+
+        <!-- 生成 XML 文档，随包分发 -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
     </PropertyGroup>
+
+    <!-- 可选：SourceLink（便于调试源代码） -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    </ItemGroup>
+
+    <!-- 将仓库根 README 打入包 -->
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="/" Link="README.md" Condition="Exists('..\..\README.md')" />
+    </ItemGroup>
 
 </Project>
