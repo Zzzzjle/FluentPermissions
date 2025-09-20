@@ -3,6 +3,11 @@ using FluentPermissions.Core.Abstractions;
 
 namespace FluentPermissions.Core.Builder;
 
+/// <summary>
+/// 权限构建器的入口点，用于定义顶层权限组。
+/// </summary>
+/// <typeparam name="TGroupOptions"></typeparam>
+/// <typeparam name="TPermissionOptions"></typeparam>
 public sealed class PermissionBuilder<TGroupOptions, TPermissionOptions>
     where TGroupOptions : PermissionOptionsBase, new()
     where TPermissionOptions : PermissionOptionsBase, new()

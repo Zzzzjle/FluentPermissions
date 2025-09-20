@@ -9,5 +9,9 @@ public interface IPermissionRegistrar<TGroupOptions, TPermissionOptions>
     where TGroupOptions : PermissionOptionsBase, new()
     where TPermissionOptions : PermissionOptionsBase, new()
 {
+    /// <summary>
+    /// register permissions in this method.
+    /// </summary>
+    /// <param name="builder"></param>
     void Register(PermissionBuilder<TGroupOptions, TPermissionOptions> builder);
 }
