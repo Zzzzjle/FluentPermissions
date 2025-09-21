@@ -27,7 +27,7 @@ public class DeepNestingTests
     [Fact]
     public void ParentKey_And_GroupKey_Are_Computed()
     {
-        var appNs = typeof(DeepNestingTests).Assembly.GetName().Name + ".Generated";
+        var appNs = typeof(DeepNestingTests).Assembly.GetName().Name + ".Auth";
         var appPermissionsType = typeof(DeepNestingTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 

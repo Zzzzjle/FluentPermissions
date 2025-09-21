@@ -11,7 +11,7 @@ public sealed class NonGenericRegistrarTests
     [Fact]
     public void NonGeneric_NoOptions_GeneratesTreeWithUnderscoreKeys()
     {
-        var appNs = typeof(NonGenericRegistrarTests).Assembly.GetName().Name + ".Generated";
+        var appNs = typeof(NonGenericRegistrarTests).Assembly.GetName().Name + ".Auth";
         var appPermissionsType = typeof(NonGenericRegistrarTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 

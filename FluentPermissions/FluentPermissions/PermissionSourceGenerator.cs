@@ -43,11 +43,10 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
     {
         if (ctx.Node is not ClassDeclarationSyntax classDecl) return null;
         var model = ctx.SemanticModel;
-        var symbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
-        if (symbol is null) return null;
+        if (model.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol symbol) return null;
 
-        var genericSig = "FluentPermissions.Core.Abstractions.IPermissionRegistrar<TGroupOptions, TPermissionOptions>";
-        var nonGenericSig = "FluentPermissions.Core.Abstractions.IPermissionRegistrar";
+        const string genericSig = "FluentPermissions.Core.Abstractions.IPermissionRegistrar<TGroupOptions, TPermissionOptions>";
+        const string nonGenericSig = "FluentPermissions.Core.Abstractions.IPermissionRegistrar";
         var generic = symbol.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.ToDisplayString() == genericSig);
         if (generic is not null)
             return new RegistrarInfo(symbol, generic, false);
@@ -62,7 +61,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         foreach (var ch in s)
             switch (ch)
             {
-                case '\\': sb.Append("\\\\"); break;
+                case '\\': sb.Append(@"\\"); break;
                 case '\"': sb.Append("\\\""); break;
                 case '\n': sb.Append("\\n"); break;
                 case '\r': sb.Append("\\r"); break;

@@ -54,7 +54,7 @@ public class ShapeFromNestedGroupsTests
     public void No_Spurious_Roots_And_Correct_Nesting()
     {
         var asm = typeof(ShapeFromNestedGroupsTests).Assembly;
-        var appNs = asm.GetName().Name + ".Generated";
+        var appNs = asm.GetName().Name + ".Auth";
         var appPermissionsType = asm.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 

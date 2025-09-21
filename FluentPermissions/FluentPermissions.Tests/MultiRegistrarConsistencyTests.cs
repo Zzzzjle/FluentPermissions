@@ -41,7 +41,7 @@ public class MultiRegistrarConsistencyTests
     [Fact]
     public void MultipleRegistrars_BuildCombinedTree_WithConsistentGenerics()
     {
-        var appNs = typeof(MultiRegistrarConsistencyTests).Assembly.GetName().Name + ".Generated";
+        var appNs = typeof(MultiRegistrarConsistencyTests).Assembly.GetName().Name + ".Auth";
         var appPermissionsType = typeof(MultiRegistrarConsistencyTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 

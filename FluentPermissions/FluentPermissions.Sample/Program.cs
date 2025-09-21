@@ -1,5 +1,5 @@
 using System;
-using FluentPermissions.Sample.Generated;
+using FluentPermissions.Sample.Auth;
 
 namespace FluentPermissions.Sample;
 

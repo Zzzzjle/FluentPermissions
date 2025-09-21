@@ -20,7 +20,7 @@ public class DefaultOptionsTests
     [Fact]
     public void Options_Defaults_Are_Applied_When_Not_Specified()
     {
-        var appNs = typeof(DefaultOptionsTests).Assembly.GetName().Name + ".Generated";
+        var appNs = typeof(DefaultOptionsTests).Assembly.GetName().Name + ".Auth";
         var appPermissionsType = typeof(DefaultOptionsTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 

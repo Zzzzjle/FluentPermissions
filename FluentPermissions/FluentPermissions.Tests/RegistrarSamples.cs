@@ -36,8 +36,7 @@ public class GeneratorUsageTests
     public void ModelPropertiesAndNavigation()
     {
         // 引用由生成器输出的命名空间
-        // 运行时测试中，我们直接使用当前程序集的 Generated 命名空间
-        var appNs = typeof(GeneratorUsageTests).Assembly.GetName().Name + ".Generated";
+        var appNs = typeof(GeneratorUsageTests).Assembly.GetName().Name + ".Auth";
         var appPermissionsType = typeof(GeneratorUsageTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 
