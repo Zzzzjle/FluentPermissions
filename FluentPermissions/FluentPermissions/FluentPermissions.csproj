@@ -9,7 +9,6 @@
 
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <IsRoslynComponent>true</IsRoslynComponent>
-        <PackageType>Analyzer</PackageType>
 
         <RootNamespace>FluentPermissions</RootNamespace>
         <PackageId>FluentPermissions</PackageId>
@@ -37,8 +36,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Analyzer should not emit transitive dependencies; keep this compile-only to avoid nuspec deps group -->
-        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj" PrivateAssets="all" IncludeAssets="compile" />
+        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj"/>
     </ItemGroup>
 
     <!-- Package the analyzer artifacts into analyzers/dotnet/cs -->
