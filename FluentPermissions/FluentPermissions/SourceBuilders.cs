@@ -66,9 +66,7 @@ internal static class SourceBuilders
         sb.AppendLine(
             "            Key = key; ParentKey = parentKey; LogicalName = logicalName; DisplayName = displayName; Description = description;");
         foreach (var prop in model.GroupOptionProps)
-        {
             sb.AppendLine($"            {prop.Name} = {prop.Name.ToLowerInvariant()};");
-        }
 
         sb.AppendLine("            SubGroups = subGroups; Permissions = permissions;");
         sb.AppendLine("        }");
@@ -117,9 +115,7 @@ internal static class SourceBuilders
         sb.AppendLine(
             "            Key = key; LogicalName = logicalName; DisplayName = displayName; Description = description; GroupKey = groupKey;");
         foreach (var prop in model.PermOptionProps)
-        {
             sb.AppendLine($"            {prop.Name} = {prop.Name.ToLowerInvariant()};");
-        }
 
         sb.AppendLine("        }");
         sb.AppendLine("    }");
@@ -203,18 +199,12 @@ internal static class SourceBuilders
         // Keys constants
         sb.AppendLine("    public static class Keys");
         sb.AppendLine("    {");
-        foreach (var g in model.RootGroups)
-        {
-            EmitKeysForGroup(sb, g, null, 8);
-        }
+        foreach (var g in model.RootGroups) EmitKeysForGroup(sb, g, null, 8);
 
         sb.AppendLine("    }");
         sb.AppendLine();
         // Hierarchy
-        foreach (var g in model.RootGroups)
-        {
-            EmitGroupClass(sb, g, null, 4);
-        }
+        foreach (var g in model.RootGroups) EmitGroupClass(sb, g, null, 4);
 
         sb.AppendLine("}");
         return sb.ToString();
@@ -334,11 +324,15 @@ internal static class SourceBuilders
         }
     }
 
-    private static string ToNullableLiteral(string? s) =>
-        s is null ? "null" : "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
+    private static string ToNullableLiteral(string? s)
+    {
+        return s is null ? "null" : "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
+    }
 
-    private static string ToLiteral(string s) =>
-        "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
+    private static string ToLiteral(string s)
+    {
+        return "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
+    }
 
     private static string GetRootNamespace(Compilation compilation)
     {

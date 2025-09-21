@@ -1,11 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using Microsoft.CodeAnalysis;
 
 namespace FluentPermissions;
 
-internal enum ConstKind { String, Bool, Int, Double, Null }
+internal enum ConstKind
+{
+    String,
+    Bool,
+    Int,
+    Double,
+    Null
+}
 
 internal sealed class ConstValue(ConstKind kind, object? value)
 {
@@ -21,7 +29,7 @@ internal sealed class ConstValue(ConstKind kind, object? value)
                 : "\"" + PermissionSourceGenerator.EscapeString((string)Value) + "\"",
             ConstKind.Bool => ((bool)Value!).ToString().ToLowerInvariant(),
             ConstKind.Int => Value!.ToString()!,
-            ConstKind.Double => ((double)Value!).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ConstKind.Double => ((double)Value!).ToString(CultureInfo.InvariantCulture),
             _ => "null"
         };
     }
@@ -36,7 +44,9 @@ internal sealed class PermissionDef(
     public string LogicalName { get; } = logicalName;
     public string? DisplayName { get; set; } = displayName;
     public string? Description { get; set; } = description;
-    public Dictionary<string, ConstValue> Props { get; } = props ?? new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+
+    public Dictionary<string, ConstValue> Props { get; } =
+        props ?? new Dictionary<string, ConstValue>(StringComparer.Ordinal);
 }
 
 internal sealed class GroupDef(
@@ -50,7 +60,10 @@ internal sealed class GroupDef(
     public string LogicalName { get; } = logicalName;
     public string? DisplayName { get; set; } = displayName;
     public string? Description { get; set; } = description;
-    public Dictionary<string, ConstValue> Props { get; } = props ?? new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+
+    public Dictionary<string, ConstValue> Props { get; } =
+        props ?? new Dictionary<string, ConstValue>(StringComparer.Ordinal);
+
     public List<PermissionDef> Permissions { get; } = permissions ?? new List<PermissionDef>();
     public List<GroupDef> Children { get; } = children ?? new List<GroupDef>();
 }

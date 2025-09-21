@@ -1,6 +1,7 @@
+using System.Collections;
+using System.Linq;
 using FluentPermissions.Core.Abstractions;
 using FluentPermissions.Core.Builder;
-using System.Linq;
 using Xunit;
 
 namespace FluentPermissions.Tests;
@@ -58,9 +59,9 @@ public class ShapeFromNestedGroupsTests
         Assert.NotNull(appPermissionsType);
 
         // Root groups should include: System, Reports (other tests may add more roots)
-        var getAll = appPermissionsType!.GetMethod("GetAllGroups");
+        var getAll = appPermissionsType.GetMethod("GetAllGroups");
         Assert.NotNull(getAll);
-        var roots = ((System.Collections.IEnumerable)getAll!.Invoke(null, null)!).Cast<object>().ToList();
+        var roots = ((IEnumerable)getAll.Invoke(null, null)!).Cast<object>().ToList();
         var rootNames = roots.Select(r => (string)r.GetType().GetProperty("LogicalName")!.GetValue(r)!).ToList();
         Assert.Contains("System", rootNames);
         Assert.Contains("Reports", rootNames);
@@ -81,9 +82,9 @@ public class ShapeFromNestedGroupsTests
         Assert.Equal("IReadOnlyDictionary`2", pbkType.GetGenericTypeDefinition().Name);
 
         // Access System group
-        var groupsByKey = (System.Collections.IDictionary)groupsByKeyObj;
+        var groupsByKey = (IDictionary)groupsByKeyObj;
         var system = groupsByKey["System"]!;
-        var children = ((System.Collections.IEnumerable)system.GetType().GetProperty("SubGroups")!.GetValue(system)!)
+        var children = ((IEnumerable)system.GetType().GetProperty("SubGroups")!.GetValue(system)!)
             .Cast<object>().ToList();
         // SubGroups is IReadOnlyList
         var childrenPropType = system.GetType().GetProperty("SubGroups")!.PropertyType;
@@ -99,22 +100,22 @@ public class ShapeFromNestedGroupsTests
         Assert.Contains("Roles", childNames);
 
         // Ensure Roles is under System, not under Users
-    Assert.True(groupsByKey.Contains("System_Roles"));
-    Assert.False(groupsByKey.Contains("System_Users_Roles"));
+        Assert.True(groupsByKey.Contains("System_Roles"));
+        Assert.False(groupsByKey.Contains("System_Users_Roles"));
 
         // Keys class shouldn't contain System_Users_Roles constant
         var keysType = appPermissionsType.GetNestedType("Keys");
         Assert.NotNull(keysType);
-        var spur = keysType!.GetField("System_Users_Roles");
+        var spur = keysType.GetField("System_Users_Roles");
         Assert.Null(spur);
 
         // Order (typed option) set via registrar
         var sysOrderProp = system.GetType().GetProperty("Order");
         Assert.NotNull(sysOrderProp);
-        Assert.Equal(10, (int)sysOrderProp!.GetValue(system)!);
-    var reports = groupsByKey["Reports"]!;
+        Assert.Equal(10, (int)sysOrderProp.GetValue(system)!);
+        var reports = groupsByKey["Reports"]!;
         var repOrderProp = reports.GetType().GetProperty("Order");
         Assert.NotNull(repOrderProp);
-        Assert.Equal(20, (int)repOrderProp!.GetValue(reports)!);
+        Assert.Equal(20, (int)repOrderProp.GetValue(reports)!);
     }
 }

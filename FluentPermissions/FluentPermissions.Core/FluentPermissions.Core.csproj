@@ -21,12 +21,12 @@
 
     <!-- 可选：SourceLink（便于调试源代码） -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All"/>
     </ItemGroup>
 
     <!-- 将仓库根 README 打入包 -->
     <ItemGroup>
-        <None Include="..\..\README.md" Pack="true" PackagePath="/" Link="README.md" Condition="Exists('..\..\README.md')" />
+        <None Include="..\..\README.md" Pack="true" PackagePath="/" Link="README.md" Condition="Exists('..\..\README.md')"/>
     </ItemGroup>
 
 </Project>

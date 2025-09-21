@@ -37,7 +37,7 @@ internal sealed class Analyzer(Compilation compilation)
                     diags.Add(Diagnostic.Create(Diagnostics.InconsistentOptionsTypes,
                         reg.Symbol.Locations.FirstOrDefault()));
                     return new Model(compilation, ImmutableArray<GroupDef>.Empty,
-                        diags.ToImmutable(), hasFatal: true);
+                        diags.ToImmutable(), true);
                 }
             }
 
@@ -62,7 +62,7 @@ internal sealed class Analyzer(Compilation compilation)
         var permProps = CollectOptionProps(permOptions as INamedTypeSymbol);
 
         return new Model(compilation, allGroups.ToImmutableArray(),
-            diags.ToImmutable(), hasFatal: false, groupOptionProps: groupProps, permOptionProps: permProps);
+            diags.ToImmutable(), false, groupProps, permProps);
     }
 
     private static ImmutableArray<OptionProp> CollectOptionProps(INamedTypeSymbol? optionType)
@@ -86,6 +86,7 @@ internal sealed class Analyzer(Compilation compilation)
             if (kind is null) continue;
             list.Add(new OptionProp(m.Name, kind.Value));
         }
+
         return list.ToImmutableArray();
     }
 
@@ -97,18 +98,14 @@ internal sealed class Analyzer(Compilation compilation)
 
         var groupsRoot = new List<GroupDef>();
 
-        IEnumerable<InvocationExpressionSyntax> topLevelInvocations = System.Linq.Enumerable.Empty<InvocationExpressionSyntax>();
+        var topLevelInvocations = Enumerable.Empty<InvocationExpressionSyntax>();
         if (methodSyntax.Body is BlockSyntax block)
-        {
             topLevelInvocations = block.Statements
                 .OfType<ExpressionStatementSyntax>()
                 .Select(s => s.Expression)
                 .OfType<InvocationExpressionSyntax>();
-        }
         else if (methodSyntax.ExpressionBody is { Expression: InvocationExpressionSyntax arrowInv })
-        {
             topLevelInvocations = new[] { arrowInv };
-        }
 
         foreach (var invRoot in topLevelInvocations)
         {
@@ -145,6 +142,7 @@ internal sealed class Analyzer(Compilation compilation)
                                 if (stack.Count > 0) stack.Pop();
                             }
                         }
+
                         break;
                     }
                     case "WithOptions" when stack.Count == 0:
@@ -157,6 +155,7 @@ internal sealed class Analyzer(Compilation compilation)
                             var cur = stack.Peek();
                             ExtractAssignmentsFromLambda(semanticModel, args[0].Expression, cur.Props);
                         }
+
                         break;
                     }
                     case "AddPermission" when stack.Count == 0:
@@ -167,7 +166,8 @@ internal sealed class Analyzer(Compilation compilation)
                         if (args.Count == 0) continue;
                         var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
                         if (parsed.LogicalName is null) continue;
-                        AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
+                        AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description,
+                            parsed.Props);
                         break;
                     }
                 }
@@ -201,7 +201,8 @@ internal sealed class Analyzer(Compilation compilation)
         }
     }
 
-    private static ArgumentSyntax? GetBuilderLambdaArgumentIfAny(IMethodSymbol methodSymbol, InvocationExpressionSyntax call)
+    private static ArgumentSyntax? GetBuilderLambdaArgumentIfAny(IMethodSymbol methodSymbol,
+        InvocationExpressionSyntax call)
     {
         var paramIndex = -1;
         for (var i = 0; i < methodSymbol.Parameters.Length; i++)
@@ -242,16 +243,12 @@ internal sealed class Analyzer(Compilation compilation)
             case BlockSyntax block:
             {
                 foreach (var stmt in block.Statements.OfType<ExpressionStatementSyntax>())
-                {
                     if (stmt.Expression is InvocationExpressionSyntax inv)
                     {
                         var calls = FlattenCalls(inv);
-                        foreach (var c in calls)
-                        {
-                            HandleCall(c);
-                        }
+                        foreach (var c in calls) HandleCall(c);
                     }
-                }
+
                 break;
             }
             case ExpressionSyntax exprBody:
@@ -259,11 +256,9 @@ internal sealed class Analyzer(Compilation compilation)
                 if (exprBody is InvocationExpressionSyntax inv)
                 {
                     var calls = FlattenCalls(inv);
-                    foreach (var c in calls)
-                    {
-                        HandleCall(c);
-                    }
+                    foreach (var c in calls) HandleCall(c);
                 }
+
                 break;
             }
         }
@@ -284,6 +279,7 @@ internal sealed class Analyzer(Compilation compilation)
                         var cur = stack.Peek();
                         ExtractAssignmentsFromLambda(semanticModel, args[0].Expression, cur.Props);
                     }
+
                     break;
                 }
                 case "DefineGroup":
@@ -293,8 +289,11 @@ internal sealed class Analyzer(Compilation compilation)
                     var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
                     if (parsed.LogicalName is null) break;
                     var parent = stack.Peek();
-                    var grp = parent.Children.FirstOrDefault(g => string.Equals(g.LogicalName, parsed.LogicalName, StringComparison.Ordinal))
-                              ?? new GroupDef(parsed.LogicalName, null, null, new Dictionary<string, ConstValue>(StringComparer.Ordinal), new List<PermissionDef>(), new List<GroupDef>());
+                    var grp = parent.Children.FirstOrDefault(g =>
+                                  string.Equals(g.LogicalName, parsed.LogicalName, StringComparison.Ordinal))
+                              ?? new GroupDef(parsed.LogicalName, null, null,
+                                  new Dictionary<string, ConstValue>(StringComparer.Ordinal), new List<PermissionDef>(),
+                                  new List<GroupDef>());
                     if (!parent.Children.Contains(grp)) parent.Children.Add(grp);
                     grp.DisplayName ??= parsed.DisplayName ?? parsed.LogicalName;
                     grp.Description ??= parsed.Description;
@@ -308,12 +307,10 @@ internal sealed class Analyzer(Compilation compilation)
                         if (builderLambda is not null)
                         {
                             ProcessBuilderLambda(grp, builderLambda, semanticModel);
-                            if (stack.Count > 0 && ReferenceEquals(stack.Peek(), grp))
-                            {
-                                stack.Pop();
-                            }
+                            if (stack.Count > 0 && ReferenceEquals(stack.Peek(), grp)) stack.Pop();
                         }
                     }
+
                     break;
                 }
                 case "AddPermission" when stack.Count > 0:
@@ -322,26 +319,25 @@ internal sealed class Analyzer(Compilation compilation)
                     if (args.Count == 0) break;
                     var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
                     if (parsed.LogicalName is null) break;
-                    AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
+                    AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description,
+                        parsed.Props);
                     break;
                 }
             }
         }
     }
 
-    private (string? LogicalName, string? DisplayName, string? Description, Dictionary<string, ConstValue> Props) ParseGroupOrPermissionArguments(
-        SemanticModel semanticModel,
-        SeparatedSyntaxList<ArgumentSyntax> args)
+    private (string? LogicalName, string? DisplayName, string? Description, Dictionary<string, ConstValue> Props)
+        ParseGroupOrPermissionArguments(
+            SemanticModel semanticModel,
+            SeparatedSyntaxList<ArgumentSyntax> args)
     {
         string? logicalName = null;
         string? displayName = null;
         string? description = null;
         var props = new Dictionary<string, ConstValue>(StringComparer.Ordinal);
 
-        if (args.Count > 0)
-        {
-            logicalName = GetConstString(semanticModel, args[0].Expression);
-        }
+        if (args.Count > 0) logicalName = GetConstString(semanticModel, args[0].Expression);
 
         for (var i = 1; i < args.Count; i++)
         {
@@ -349,9 +345,19 @@ internal sealed class Analyzer(Compilation compilation)
             var str = GetConstString(semanticModel, expr);
             if (str is not null)
             {
-                if (displayName is null) { displayName = str; continue; }
-                if (description is null) { description = str; continue; }
+                if (displayName is null)
+                {
+                    displayName = str;
+                    continue;
+                }
+
+                if (description is null)
+                {
+                    description = str;
+                    continue;
+                }
             }
+
             ExtractAssignmentsFromLambda(semanticModel, expr, props);
         }
 
@@ -400,21 +406,15 @@ internal sealed class Analyzer(Compilation compilation)
             case BlockSyntax block:
             {
                 foreach (var stmt in block.Statements.OfType<ExpressionStatementSyntax>())
-                {
                     if (stmt.Expression is AssignmentExpressionSyntax assign)
-                    {
                         TryCaptureAssignment(semanticModel, paramName, assign, into);
-                    }
-                }
 
                 break;
             }
             case ExpressionSyntax expr:
             {
                 if (expr is AssignmentExpressionSyntax assign)
-                {
                     TryCaptureAssignment(semanticModel, paramName, assign, into);
-                }
 
                 break;
             }
@@ -428,10 +428,7 @@ internal sealed class Analyzer(Compilation compilation)
             id.Identifier.Text != paramName) return;
         var propName = maes.Name.Identifier.Text;
         var value = GetConstValue(semanticModel, assign.Right);
-        if (value is not null)
-        {
-            into[propName] = value;
-        }
+        if (value is not null) into[propName] = value;
     }
 
     private static string? GetConstString(SemanticModel semanticModel, ExpressionSyntax expr)
@@ -456,9 +453,11 @@ internal sealed class Analyzer(Compilation compilation)
         };
     }
 
-    private static void AddOrUpdatePermission(GroupDef parent, string name, string? displayName, string? description, Dictionary<string, ConstValue> props)
+    private static void AddOrUpdatePermission(GroupDef parent, string name, string? displayName, string? description,
+        Dictionary<string, ConstValue> props)
     {
-        var existing = parent.Permissions.FirstOrDefault(p => string.Equals(p.LogicalName, name, StringComparison.Ordinal));
+        var existing =
+            parent.Permissions.FirstOrDefault(p => string.Equals(p.LogicalName, name, StringComparison.Ordinal));
         if (existing is not null)
         {
             if (existing.DisplayName is null && displayName is not null) existing.DisplayName = displayName;
@@ -466,6 +465,7 @@ internal sealed class Analyzer(Compilation compilation)
             foreach (var kv in props) existing.Props[kv.Key] = kv.Value;
             return;
         }
+
         parent.Permissions.Add(new PermissionDef(name, displayName, description, props));
     }
 }

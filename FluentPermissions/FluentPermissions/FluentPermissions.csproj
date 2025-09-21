@@ -36,15 +36,15 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj" />
+        <ProjectReference Include="..\FluentPermissions.Core\FluentPermissions.Core.csproj"/>
     </ItemGroup>
 
     <!-- Package the analyzer artifacts into analyzers/dotnet/cs -->
     <ItemGroup>
-        <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" />
-        <None Include="$(TargetDir)$(AssemblyName).xml" Pack="true" PackagePath="analyzers/dotnet/cs" Condition="Exists('$(TargetDir)$(AssemblyName).xml')" />
+        <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs"/>
+        <None Include="$(TargetDir)$(AssemblyName).xml" Pack="true" PackagePath="analyzers/dotnet/cs" Condition="Exists('$(TargetDir)$(AssemblyName).xml')"/>
         <!-- Bring the root README into the package -->
-        <None Include="..\..\README.md" Pack="true" PackagePath="/" Link="README.md" Condition="Exists('..\..\README.md')" />
+        <None Include="..\..\README.md" Pack="true" PackagePath="/" Link="README.md" Condition="Exists('..\..\README.md')"/>
     </ItemGroup>
 
 </Project>

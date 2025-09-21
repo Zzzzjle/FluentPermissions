@@ -39,9 +39,7 @@ public static class Program
 
         Console.WriteLine("All root groups:");
         foreach (var g in AppPermissions.GetAllGroups())
-        {
             Console.WriteLine($"- {g.Key} ({g.Permissions.Count} perms, {g.SubGroups.Count} children)");
-        }
     }
 }
 

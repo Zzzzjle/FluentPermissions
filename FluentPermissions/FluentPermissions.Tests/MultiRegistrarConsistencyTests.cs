@@ -1,7 +1,8 @@
+using System.Collections;
+using System.Linq;
 using FluentPermissions.Core.Abstractions;
 using FluentPermissions.Core.Builder;
 using Xunit;
-using System.Linq;
 
 namespace FluentPermissions.Tests;
 
@@ -45,8 +46,8 @@ public class MultiRegistrarConsistencyTests
         Assert.NotNull(appPermissionsType);
 
         // Roots should include Sales and HR
-        var getAll = appPermissionsType!.GetMethod("GetAllGroups");
-        var roots = ((System.Collections.IEnumerable)getAll!.Invoke(null, null)!).Cast<object>().ToList();
+        var getAll = appPermissionsType.GetMethod("GetAllGroups");
+        var roots = ((IEnumerable)getAll!.Invoke(null, null)!).Cast<object>().ToList();
         var rootNames = roots.Select(r => (string)r.GetType().GetProperty("LogicalName")!.GetValue(r)!).ToList();
         Assert.Contains("Sales", rootNames);
         Assert.Contains("HR", rootNames);
@@ -58,7 +59,7 @@ public class MultiRegistrarConsistencyTests
         Assert.Equal("IReadOnlyDictionary`2", permsByKeyField.FieldType.GetGenericTypeDefinition().Name);
 
         // Verify Sales group
-        var groupsDict = (System.Collections.IDictionary)groupsByKeyField.GetValue(null)!;
+        var groupsDict = (IDictionary)groupsByKeyField.GetValue(null)!;
         var sales = groupsDict["Sales"]!;
         var orderProp = sales.GetType().GetProperty("Order")!;
         var iconProp = sales.GetType().GetProperty("Icon")!;
@@ -71,7 +72,7 @@ public class MultiRegistrarConsistencyTests
         Assert.Equal("IReadOnlyList`1", childrenProp.PropertyType.GetGenericTypeDefinition().Name);
         var permsProp = hr.GetType().GetProperty("Permissions")!;
         Assert.Equal("IReadOnlyList`1", permsProp.PropertyType.GetGenericTypeDefinition().Name);
-        var perms = ((System.Collections.IEnumerable)permsProp.GetValue(hr)!).Cast<object>().ToList();
+        var perms = ((IEnumerable)permsProp.GetValue(hr)!).Cast<object>().ToList();
         Assert.Single(perms);
         var edit = perms[0];
         var keyProp = edit.GetType().GetProperty("Key")!;

@@ -1,7 +1,8 @@
+using System.Collections;
+using System.Linq;
 using FluentPermissions.Core.Abstractions;
 using FluentPermissions.Core.Builder;
 using Xunit;
-using System.Linq;
 
 namespace FluentPermissions.Tests;
 
@@ -60,7 +61,7 @@ public class GeneratorUsageTests
         Assert.Equal("Group1 Desc", descProp.GetValue(group));
         Assert.Equal(7, orderProp.GetValue(group));
 
-        var perms = (System.Collections.IEnumerable)permsProp.GetValue(group)!;
+        var perms = (IEnumerable)permsProp.GetValue(group)!;
         var list = perms.Cast<object>().ToList();
         Assert.Equal(2, list.Count);
 
@@ -92,7 +93,7 @@ public class GeneratorUsageTests
         // 验证全局查找字典
         var groupsByKeyField = appPermissionsType.GetField("GroupsByKey");
         Assert.NotNull(groupsByKeyField);
-        var groupsDict = (System.Collections.IDictionary)groupsByKeyField.GetValue(null)!;
+        var groupsDict = (IDictionary)groupsByKeyField.GetValue(null)!;
         Assert.True(groupsDict.Contains("G1"));
     }
 }

@@ -29,10 +29,7 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
             // Validate option types consistency
             if (models.Diagnostics.Length > 0)
             {
-                foreach (var d in models.Diagnostics)
-                {
-                    spc.ReportDiagnostic(d);
-                }
+                foreach (var d in models.Diagnostics) spc.ReportDiagnostic(d);
 
                 if (models.HasFatal) return;
             }
@@ -58,7 +55,6 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
     {
         var sb = new StringBuilder(s.Length);
         foreach (var ch in s)
-        {
             switch (ch)
             {
                 case '\\': sb.Append("\\\\"); break;
@@ -79,7 +75,6 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
 
                     break;
             }
-        }
 
         return sb.ToString();
     }
