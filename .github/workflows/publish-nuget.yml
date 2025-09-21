@@ -2,9 +2,8 @@ name: Publish to NuGet
 
 on:
   push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+-*"
+    branches:
+      - main
 
 jobs:
   pack-and-publish:
@@ -20,13 +19,12 @@ jobs:
           dotnet-version: |
             9.0.x
 
-      - name: Compute version from tag
+      - name: Compute pre-release version suffix
         id: vars
         shell: bash
         run: |
-          ref="${GITHUB_REF_NAME}"
-          version="${ref#v}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          suffix="preview.1.$(date +%y%m%d%H%M)"
+          echo "version_suffix=$suffix" >> "$GITHUB_OUTPUT"
 
       - name: Restore
         run: dotnet restore
@@ -37,21 +35,20 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build
 
-      # 同时打包 Core 与 Analyzer（版本取自 tag）
       - name: Pack FluentPermissions.Core
         run: |
           mkdir -p out
           dotnet pack FluentPermissions/FluentPermissions.Core/FluentPermissions.Core.csproj \
             -c Release -o ./out \
             /p:ContinuousIntegrationBuild=true \
-            /p:PackageVersion=${{ steps.vars.outputs.version }}
+            --version-suffix "${{ steps.vars.outputs.version_suffix }}"
 
       - name: Pack FluentPermissions analyzer
         run: |
           dotnet pack FluentPermissions/FluentPermissions/FluentPermissions.csproj \
             -c Release -o ./out \
             /p:ContinuousIntegrationBuild=true \
-            /p:PackageVersion=${{ steps.vars.outputs.version }}
+            --version-suffix "${{ steps.vars.outputs.version_suffix }}"
 
       - name: Publish to NuGet.org
         env:
