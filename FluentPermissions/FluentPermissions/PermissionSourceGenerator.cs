@@ -46,9 +46,14 @@ public sealed class PermissionSourceGenerator : IIncrementalGenerator
         var symbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
         if (symbol is null) return null;
 
-        var registrarInterface = symbol.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.ToDisplayString() ==
-                                                                          "FluentPermissions.Core.Abstractions.IPermissionRegistrar<TGroupOptions, TPermissionOptions>");
-        return registrarInterface is null ? null : new RegistrarInfo(symbol, registrarInterface);
+        var genericSig = "FluentPermissions.Core.Abstractions.IPermissionRegistrar<TGroupOptions, TPermissionOptions>";
+        var nonGenericSig = "FluentPermissions.Core.Abstractions.IPermissionRegistrar";
+        var generic = symbol.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.ToDisplayString() == genericSig);
+        if (generic is not null)
+            return new RegistrarInfo(symbol, generic, false);
+
+        var nonGeneric = symbol.AllInterfaces.FirstOrDefault(i => i.ToDisplayString() == nonGenericSig);
+        return nonGeneric is not null ? new RegistrarInfo(symbol, null, true) : null;
     }
 
     internal static string EscapeString(string s)

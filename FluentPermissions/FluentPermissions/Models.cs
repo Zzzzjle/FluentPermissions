@@ -68,10 +68,11 @@ internal sealed class GroupDef(
     public List<GroupDef> Children { get; } = children ?? new List<GroupDef>();
 }
 
-internal sealed class RegistrarInfo(INamedTypeSymbol symbol, INamedTypeSymbol @interface)
+internal sealed class RegistrarInfo(INamedTypeSymbol symbol, INamedTypeSymbol? @interface, bool isNonGeneric)
 {
     public INamedTypeSymbol Symbol { get; } = symbol;
-    public INamedTypeSymbol Interface { get; } = @interface;
+    public INamedTypeSymbol? Interface { get; } = @interface;
+    public bool IsNonGeneric { get; } = isNonGeneric;
 }
 
 internal sealed class OptionProp(string name, ConstKind kind)

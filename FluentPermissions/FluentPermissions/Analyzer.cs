@@ -21,23 +21,30 @@ internal sealed class Analyzer(Compilation compilation)
 
         foreach (var reg in registrars)
         {
-            var @interface = reg.Interface;
-            var g = @interface.TypeArguments[0];
-            var p = @interface.TypeArguments[1];
-            if (groupOptions is null)
+            if (reg.IsNonGeneric)
             {
-                groupOptions = g;
-                permOptions = p;
+                // 非泛型 registrar：不参与选项一致性检查
             }
             else
             {
-                if (!SymbolEqualityComparer.Default.Equals(groupOptions, g) ||
-                    !SymbolEqualityComparer.Default.Equals(permOptions!, p))
+                var @interface = reg.Interface!;
+                var g = @interface.TypeArguments[0];
+                var p = @interface.TypeArguments[1];
+                if (groupOptions is null)
                 {
-                    diags.Add(Diagnostic.Create(Diagnostics.InconsistentOptionsTypes,
-                        reg.Symbol.Locations.FirstOrDefault()));
-                    return new Model(compilation, ImmutableArray<GroupDef>.Empty,
-                        diags.ToImmutable(), true);
+                    groupOptions = g;
+                    permOptions = p;
+                }
+                else
+                {
+                    if (!SymbolEqualityComparer.Default.Equals(groupOptions, g) ||
+                        !SymbolEqualityComparer.Default.Equals(permOptions!, p))
+                    {
+                        diags.Add(Diagnostic.Create(Diagnostics.InconsistentOptionsTypes,
+                            reg.Symbol.Locations.FirstOrDefault()));
+                        return new Model(compilation, ImmutableArray<GroupDef>.Empty,
+                            diags.ToImmutable(), true);
+                    }
                 }
             }
 
@@ -99,106 +106,48 @@ internal sealed class Analyzer(Compilation compilation)
         var groupsRoot = new List<GroupDef>();
 
         var topLevelInvocations = Enumerable.Empty<InvocationExpressionSyntax>();
-        if (methodSyntax.Body is BlockSyntax block)
+        if (methodSyntax.Body is { } block)
             topLevelInvocations = block.Statements
                 .OfType<ExpressionStatementSyntax>()
                 .Select(s => s.Expression)
                 .OfType<InvocationExpressionSyntax>();
         else if (methodSyntax.ExpressionBody is { Expression: InvocationExpressionSyntax arrowInv })
-            topLevelInvocations = new[] { arrowInv };
+            topLevelInvocations = [arrowInv];
 
         foreach (var invRoot in topLevelInvocations)
         {
             var calls = FlattenCalls(invRoot).ToList();
             if (!calls.Any(c => c.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "DefineGroup" }))
                 continue;
-
-            var stack = new Stack<GroupDef>();
-
-            foreach (var call in calls)
-            {
-                if (call.Expression is not MemberAccessExpressionSyntax maes) continue;
-                var methodName = maes.Name.Identifier.Text;
-                switch (methodName)
-                {
-                    case "DefineGroup":
-                    {
-                        var args = call.ArgumentList.Arguments;
-                        if (args.Count == 0) continue;
-                        var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
-                        if (parsed.LogicalName is null) continue;
-                        var parent = stack.Count == 0 ? null : stack.Peek();
-                        var grp = GetOrAddGroup(parent, parsed.LogicalName, parsed.Props);
-                        grp.DisplayName ??= parsed.DisplayName ?? parsed.LogicalName;
-                        grp.Description ??= parsed.Description;
-                        stack.Push(grp);
-
-                        if (semanticModel.GetSymbolInfo(call).Symbol is IMethodSymbol methodSymbol)
-                        {
-                            var builderLambdaArg = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
-                            if (builderLambdaArg is not null)
-                            {
-                                ProcessBuilderLambda(grp, builderLambdaArg, semanticModel);
-                                if (stack.Count > 0) stack.Pop();
-                            }
-                        }
-
-                        break;
-                    }
-                    case "WithOptions" when stack.Count == 0:
-                        break;
-                    case "WithOptions":
-                    {
-                        var args = call.ArgumentList.Arguments;
-                        if (args.Count > 0)
-                        {
-                            var cur = stack.Peek();
-                            ExtractAssignmentsFromLambda(semanticModel, args[0].Expression, cur.Props);
-                        }
-
-                        break;
-                    }
-                    case "AddPermission" when stack.Count == 0:
-                        continue;
-                    case "AddPermission":
-                    {
-                        var args = call.ArgumentList.Arguments;
-                        if (args.Count == 0) continue;
-                        var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
-                        if (parsed.LogicalName is null) continue;
-                        AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description,
-                            parsed.Props);
-                        break;
-                    }
-                }
-            }
+            ProcessInvocationChain(GetOrAddGroup, current: null, calls, semanticModel);
         }
 
         foreach (var g in groupsRoot)
             yield return g;
         yield break;
 
+        // local helper kept below for ProcessInvocationChain
         GroupDef GetOrAddGroup(GroupDef? parent, string name, Dictionary<string, ConstValue> props)
         {
             if (parent is null)
             {
-                var existing =
-                    groupsRoot.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
+                var existing = groupsRoot.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
                 if (existing is not null) return existing;
-                var created = new GroupDef(name, null, null, props, new List<PermissionDef>(), new List<GroupDef>());
+                var created = new GroupDef(name, null, null, props, [], []);
                 groupsRoot.Add(created);
                 return created;
             }
             else
             {
-                var existing =
-                    parent.Children.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
+                var existing = parent.Children.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
                 if (existing is not null) return existing;
-                var created = new GroupDef(name, null, null, props, new List<PermissionDef>(), new List<GroupDef>());
+                var created = new GroupDef(name, null, null, props, [], []);
                 parent.Children.Add(created);
                 return created;
             }
         }
+
+        // class-level helper declared below
     }
 
     private static ArgumentSyntax? GetBuilderLambdaArgumentIfAny(IMethodSymbol methodSymbol,
@@ -223,7 +172,7 @@ internal sealed class Analyzer(Compilation compilation)
         return paramIndex >= args.Count ? null : args[paramIndex];
     }
 
-    private void ProcessBuilderLambda(GroupDef current, ArgumentSyntax lambdaArg, SemanticModel semanticModel)
+    private void ProcessBuilderLambda(GroupDef current, ArgumentSyntax lambdaArg, SemanticModel semanticModel, Func<GroupDef?, string, Dictionary<string, ConstValue>, GroupDef> getOrAddGroup)
     {
         var expr = lambdaArg.Expression;
         var body = expr switch
@@ -235,9 +184,6 @@ internal sealed class Analyzer(Compilation compilation)
         };
         if (body is null) return;
 
-        var stack = new Stack<GroupDef>();
-        stack.Push(current);
-
         switch (body)
         {
             case BlockSyntax block:
@@ -246,7 +192,7 @@ internal sealed class Analyzer(Compilation compilation)
                     if (stmt.Expression is InvocationExpressionSyntax inv)
                     {
                         var calls = FlattenCalls(inv);
-                        foreach (var c in calls) HandleCall(c);
+                        ProcessInvocationChain(getOrAddGroup, current, calls, semanticModel);
                     }
 
                 break;
@@ -256,7 +202,7 @@ internal sealed class Analyzer(Compilation compilation)
                 if (exprBody is InvocationExpressionSyntax inv)
                 {
                     var calls = FlattenCalls(inv);
-                    foreach (var c in calls) HandleCall(c);
+                    ProcessInvocationChain(getOrAddGroup, current, calls, semanticModel);
                 }
 
                 break;
@@ -264,63 +210,65 @@ internal sealed class Analyzer(Compilation compilation)
         }
 
         return;
+    }
 
-        void HandleCall(InvocationExpressionSyntax call)
+    private void ProcessInvocationChain(
+        Func<GroupDef?, string, Dictionary<string, ConstValue>, GroupDef> getOrAddGroup,
+        GroupDef? current,
+        System.Collections.Generic.IEnumerable<InvocationExpressionSyntax> calls,
+        SemanticModel sm)
+    {
+        var stack = new Stack<GroupDef>();
+        if (current is not null) stack.Push(current);
+
+        foreach (var call in calls)
         {
-            if (call.Expression is not MemberAccessExpressionSyntax maes) return;
+            if (call.Expression is not MemberAccessExpressionSyntax maes) continue;
             var methodName = maes.Name.Identifier.Text;
             switch (methodName)
             {
-                case "WithOptions" when stack.Count > 0:
+                case "DefineGroup":
                 {
+                    var args = call.ArgumentList.Arguments;
+                    if (args.Count == 0) continue;
+                    var parsed = ParseGroupOrPermissionArguments(sm, args);
+                    if (parsed.LogicalName is null) continue;
+                    var parent = stack.Count == 0 ? null : stack.Peek();
+                    var grp = getOrAddGroup(parent, parsed.LogicalName, parsed.Props);
+                    grp.DisplayName ??= parsed.DisplayName ?? parsed.LogicalName;
+                    grp.Description ??= parsed.Description;
+                    stack.Push(grp);
+
+                    if (sm.GetSymbolInfo(call).Symbol is IMethodSymbol methodSymbol)
+                    {
+                        var builderLambdaArg = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
+                        if (builderLambdaArg is not null)
+                        {
+                            ProcessBuilderLambda(grp, builderLambdaArg, sm, getOrAddGroup);
+                            if (stack.Count > 0) stack.Pop();
+                        }
+                    }
+                    break;
+                }
+                case "WithOptions":
+                {
+                    if (stack.Count == 0) break;
                     var args = call.ArgumentList.Arguments;
                     if (args.Count > 0)
                     {
                         var cur = stack.Peek();
-                        ExtractAssignmentsFromLambda(semanticModel, args[0].Expression, cur.Props);
+                        ExtractAssignmentsFromLambda(sm, args[0].Expression, cur.Props);
                     }
-
                     break;
                 }
-                case "DefineGroup":
+                case "AddPermission":
                 {
+                    if (stack.Count == 0) break;
                     var args = call.ArgumentList.Arguments;
                     if (args.Count == 0) break;
-                    var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
+                    var parsed = ParseGroupOrPermissionArguments(sm, args);
                     if (parsed.LogicalName is null) break;
-                    var parent = stack.Peek();
-                    var grp = parent.Children.FirstOrDefault(g =>
-                                  string.Equals(g.LogicalName, parsed.LogicalName, StringComparison.Ordinal))
-                              ?? new GroupDef(parsed.LogicalName, null, null,
-                                  new Dictionary<string, ConstValue>(StringComparer.Ordinal), new List<PermissionDef>(),
-                                  new List<GroupDef>());
-                    if (!parent.Children.Contains(grp)) parent.Children.Add(grp);
-                    grp.DisplayName ??= parsed.DisplayName ?? parsed.LogicalName;
-                    grp.Description ??= parsed.Description;
-                    foreach (var kv in parsed.Props) grp.Props[kv.Key] = kv.Value;
-
-                    stack.Push(grp);
-
-                    if (semanticModel.GetSymbolInfo(call).Symbol is IMethodSymbol methodSymbol)
-                    {
-                        var builderLambda = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
-                        if (builderLambda is not null)
-                        {
-                            ProcessBuilderLambda(grp, builderLambda, semanticModel);
-                            if (stack.Count > 0 && ReferenceEquals(stack.Peek(), grp)) stack.Pop();
-                        }
-                    }
-
-                    break;
-                }
-                case "AddPermission" when stack.Count > 0:
-                {
-                    var args = call.ArgumentList.Arguments;
-                    if (args.Count == 0) break;
-                    var parsed = ParseGroupOrPermissionArguments(semanticModel, args);
-                    if (parsed.LogicalName is null) break;
-                    AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description,
-                        parsed.Props);
+                    AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
                     break;
                 }
             }
