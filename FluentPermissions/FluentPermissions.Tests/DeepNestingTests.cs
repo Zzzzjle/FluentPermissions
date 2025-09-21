@@ -14,7 +14,7 @@ public class DeepRegistrar : IPermissionRegistrar<TestGroupOptions, TestPermissi
             a =>
             {
                 a.DefineGroup("A1", "A1组",
-                    a1 => { a1.DefineGroup("A1a", "A1a组", a1a => { a1a.AddPermission("X", "操作X"); }); });
+                    a1 => { a1.DefineGroup("A1a", "A1a组", a1A => { a1A.AddPermission("X", "操作X"); }); });
             });
 
         // Chain 2: B (permission Y)

@@ -324,11 +324,6 @@ internal static class SourceBuilders
         }
     }
 
-    private static string ToNullableLiteral(string? s)
-    {
-        return s is null ? "null" : "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";
-    }
-
     private static string ToLiteral(string s)
     {
         return "\"" + PermissionSourceGenerator.EscapeString(s) + "\"";

@@ -15,14 +15,14 @@ public sealed class NonGenericRegistrarTests
         var appPermissionsType = typeof(NonGenericRegistrarTests).Assembly.GetType(appNs + ".AppPermissions");
         Assert.NotNull(appPermissionsType);
 
-        var getAll = appPermissionsType!.GetMethod("GetAllGroups");
+        var getAll = appPermissionsType.GetMethod("GetAllGroups");
         Assert.NotNull(getAll);
-        var roots = ((IEnumerable)getAll!.Invoke(null, null)!).Cast<object>().ToList();
+        var roots = ((IEnumerable)getAll.Invoke(null, null)!).Cast<object>().ToList();
         Assert.True(roots.Count >= 2);
 
         var keys = appPermissionsType.GetNestedType("Keys");
         Assert.NotNull(keys);
-        Assert.NotNull(keys!.GetField("SystemNG_Users_Create"));
+        Assert.NotNull(keys.GetField("SystemNG_Users_Create"));
         Assert.NotNull(keys.GetField("SystemNG_Roles_Assign"));
         Assert.NotNull(keys.GetField("ReportsNG_View"));
 
@@ -32,6 +32,7 @@ public sealed class NonGenericRegistrarTests
         Assert.NotNull(permsByKey);
     }
 
+    // ReSharper disable once UnusedType.Local
     private sealed class NonGenericAppPermissionDefinition : IPermissionRegistrar
     {
         public void Register(PermissionBuilder builder)

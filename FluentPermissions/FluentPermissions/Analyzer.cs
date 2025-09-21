@@ -208,14 +208,12 @@ internal sealed class Analyzer(Compilation compilation)
                 break;
             }
         }
-
-        return;
     }
 
     private void ProcessInvocationChain(
         Func<GroupDef?, string, Dictionary<string, ConstValue>, GroupDef> getOrAddGroup,
         GroupDef? current,
-        System.Collections.Generic.IEnumerable<InvocationExpressionSyntax> calls,
+        IEnumerable<InvocationExpressionSyntax> calls,
         SemanticModel sm)
     {
         var stack = new Stack<GroupDef>();
