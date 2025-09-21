@@ -16,17 +16,16 @@ internal sealed class Analyzer(Compilation compilation)
 
         ITypeSymbol? groupOptions = null;
         ITypeSymbol? permOptions = null;
+        var sawGeneric = false;
 
         var allGroups = new List<GroupDef>();
 
         foreach (var reg in registrars)
         {
-            if (reg.IsNonGeneric)
+            // Check generic consistency
+            if (!reg.IsNonGeneric)
             {
-                // 非泛型 registrar：不参与选项一致性检查
-            }
-            else
-            {
+                sawGeneric = true;
                 var @interface = reg.Interface!;
                 var g = @interface.TypeArguments[0];
                 var p = @interface.TypeArguments[1];
@@ -65,8 +64,12 @@ internal sealed class Analyzer(Compilation compilation)
             }
         }
 
-        var groupProps = CollectOptionProps(groupOptions as INamedTypeSymbol);
-        var permProps = CollectOptionProps(permOptions as INamedTypeSymbol);
+        var groupProps = sawGeneric
+            ? CollectOptionProps(groupOptions as INamedTypeSymbol)
+            : ImmutableArray<OptionProp>.Empty;
+        var permProps = sawGeneric
+            ? CollectOptionProps(permOptions as INamedTypeSymbol)
+            : ImmutableArray<OptionProp>.Empty;
 
         return new Model(compilation, allGroups.ToImmutableArray(),
             diags.ToImmutable(), false, groupProps, permProps);
@@ -131,7 +134,8 @@ internal sealed class Analyzer(Compilation compilation)
         {
             if (parent is null)
             {
-                var existing = groupsRoot.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
+                var existing =
+                    groupsRoot.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
                 if (existing is not null) return existing;
                 var created = new GroupDef(name, null, null, props, [], []);
                 groupsRoot.Add(created);
@@ -139,7 +143,8 @@ internal sealed class Analyzer(Compilation compilation)
             }
             else
             {
-                var existing = parent.Children.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
+                var existing =
+                    parent.Children.FirstOrDefault(g => string.Equals(g.LogicalName, name, StringComparison.Ordinal));
                 if (existing is not null) return existing;
                 var created = new GroupDef(name, null, null, props, [], []);
                 parent.Children.Add(created);
@@ -172,7 +177,8 @@ internal sealed class Analyzer(Compilation compilation)
         return paramIndex >= args.Count ? null : args[paramIndex];
     }
 
-    private void ProcessBuilderLambda(GroupDef current, ArgumentSyntax lambdaArg, SemanticModel semanticModel, Func<GroupDef?, string, Dictionary<string, ConstValue>, GroupDef> getOrAddGroup)
+    private void ProcessBuilderLambda(GroupDef current, ArgumentSyntax lambdaArg, SemanticModel semanticModel,
+        Func<GroupDef?, string, Dictionary<string, ConstValue>, GroupDef> getOrAddGroup)
     {
         var expr = lambdaArg.Expression;
         var body = expr switch
@@ -246,6 +252,7 @@ internal sealed class Analyzer(Compilation compilation)
                             if (stack.Count > 0) stack.Pop();
                         }
                     }
+
                     break;
                 }
                 case "WithOptions":
@@ -257,6 +264,7 @@ internal sealed class Analyzer(Compilation compilation)
                         var cur = stack.Peek();
                         ExtractAssignmentsFromLambda(sm, args[0].Expression, cur.Props);
                     }
+
                     break;
                 }
                 case "AddPermission":
@@ -266,7 +274,8 @@ internal sealed class Analyzer(Compilation compilation)
                     if (args.Count == 0) break;
                     var parsed = ParseGroupOrPermissionArguments(sm, args);
                     if (parsed.LogicalName is null) break;
-                    AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description, parsed.Props);
+                    AddOrUpdatePermission(stack.Peek(), parsed.LogicalName, parsed.DisplayName, parsed.Description,
+                        parsed.Props);
                     break;
                 }
             }
