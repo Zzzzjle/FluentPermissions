@@ -122,7 +122,7 @@ internal sealed class Analyzer(Compilation compilation)
             var calls = FlattenCalls(invRoot).ToList();
             if (!calls.Any(c => c.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "DefineGroup" }))
                 continue;
-            ProcessInvocationChain(GetOrAddGroup, current: null, calls, semanticModel);
+            ProcessInvocationChain(GetOrAddGroup, null, calls, semanticModel);
         }
 
         foreach (var g in groupsRoot)
@@ -172,9 +172,24 @@ internal sealed class Analyzer(Compilation compilation)
             break;
         }
 
-        if (paramIndex < 0) return null;
-        var args = call.ArgumentList.Arguments;
-        return paramIndex >= args.Count ? null : args[paramIndex];
+        // 语义识别成功
+        if (paramIndex >= 0)
+        {
+            var args = call.ArgumentList.Arguments;
+            return paramIndex >= args.Count ? null : args[paramIndex];
+        }
+
+        // 回退：仅按语法寻找调用中的 lambda 参数（通常为最后一个）
+        // 这样即便语义模型未能解析到 Action<PermissionGroupBuilder<...>> 也能继续遍历组内定义。
+        var fallbacks = call.ArgumentList.Arguments;
+        for (var i = fallbacks.Count - 1; i >= 0; i--)
+        {
+            var expr = fallbacks[i].Expression;
+            if (expr is ParenthesizedLambdaExpressionSyntax or SimpleLambdaExpressionSyntax)
+                return fallbacks[i];
+        }
+
+        return null;
     }
 
     private void ProcessBuilderLambda(GroupDef current, ArgumentSyntax lambdaArg, SemanticModel semanticModel,
@@ -243,14 +258,29 @@ internal sealed class Analyzer(Compilation compilation)
                     grp.Description ??= parsed.Description;
                     stack.Push(grp);
 
+                    // 查找 builder-lambda 参数：优先语义，再回退语法
+                    ArgumentSyntax? builderLambdaArg = null;
                     if (sm.GetSymbolInfo(call).Symbol is IMethodSymbol methodSymbol)
+                        builderLambdaArg = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
+
+                    if (builderLambdaArg is null)
                     {
-                        var builderLambdaArg = GetBuilderLambdaArgumentIfAny(methodSymbol, call);
-                        if (builderLambdaArg is not null)
+                        var argsList = call.ArgumentList.Arguments;
+                        for (var i = argsList.Count - 1; i >= 0; i--)
                         {
-                            ProcessBuilderLambda(grp, builderLambdaArg, sm, getOrAddGroup);
-                            if (stack.Count > 0) stack.Pop();
+                            var e = argsList[i].Expression;
+                            if (e is ParenthesizedLambdaExpressionSyntax or SimpleLambdaExpressionSyntax)
+                            {
+                                builderLambdaArg = argsList[i];
+                                break;
+                            }
                         }
+                    }
+
+                    if (builderLambdaArg is not null)
+                    {
+                        ProcessBuilderLambda(grp, builderLambdaArg, sm, getOrAddGroup);
+                        if (stack.Count > 0) stack.Pop();
                     }
 
                     break;
